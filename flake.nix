@@ -27,7 +27,7 @@
           };
 
           # Provider version from provider.go
-          providerVersion = "0.2.0";
+          providerVersion = "0.2.1";
 
           # Script to build provider binary
           build-provider = pkgs.writeShellScriptBin "build-provider" ''
@@ -63,13 +63,17 @@
             cd "$REPO_ROOT"
             export CGO_ENABLED=0
             
-            # Generate schema and SDK using go run
-            pulumi package gen-sdk \
-              <(go run ./provider/cmd/pulumi-resource-netbird) \
-              --language go \
-              --out "$REPO_ROOT/sdk/go/netbird"
+            # Build provider if not exists
+            if [ ! -f "bin/pulumi-resource-netbird" ]; then
+              echo "Building provider first..."
+              ${build-provider}/bin/build-provider
+            fi
             
-            echo "✅ Go SDK generated in sdk/go/netbird"
+            # Generate SDK using built binary
+            pulumi package gen-sdk \
+              "$REPO_ROOT/bin/pulumi-resource-netbird" \
+              --language go
+            echo "✅ Go SDK generated in sdk"
           '';
 
           # Script to generate Python SDK
@@ -79,8 +83,15 @@
             cd "$REPO_ROOT"
             export CGO_ENABLED=0
             
+            # Build provider if not exists
+            if [ ! -f "bin/pulumi-resource-netbird" ]; then
+              echo "Building provider first..."
+              ${build-provider}/bin/build-provider
+            fi
+            
+            # Generate SDK using built binary
             pulumi package gen-sdk \
-              <(go run ./provider/cmd/pulumi-resource-netbird) \
+              "$REPO_ROOT/bin/pulumi-resource-netbird" \
               --language python \
               --out "$REPO_ROOT/sdk/python"
             
@@ -94,8 +105,15 @@
             cd "$REPO_ROOT"
             export CGO_ENABLED=0
             
+            # Build provider if not exists
+            if [ ! -f "bin/pulumi-resource-netbird" ]; then
+              echo "Building provider first..."
+              ${build-provider}/bin/build-provider
+            fi
+            
+            # Generate SDK using built binary
             pulumi package gen-sdk \
-              <(go run ./provider/cmd/pulumi-resource-netbird) \
+              "$REPO_ROOT/bin/pulumi-resource-netbird" \
               --language nodejs \
               --out "$REPO_ROOT/sdk/nodejs"
             
@@ -164,9 +182,9 @@
               echo "    install-provider     # Install provider plugin"
               echo ""
               echo "  SDK Generation:"
-              echo "    gen-sdk-go           # Generate Go SDK (uses go run)"
-              echo "    gen-sdk-python       # Generate Python SDK (uses go run)"
-              echo "    gen-sdk-nodejs       # Generate TypeScript SDK (uses go run)"
+              echo "    gen-sdk-go           # Generate Go SDK"
+              echo "    gen-sdk-python       # Generate Python SDK"
+              echo "    gen-sdk-nodejs       # Generate TypeScript SDK"
               echo "    gen-sdk-all          # Generate all SDKs"
               echo ""
               echo "  Development:"

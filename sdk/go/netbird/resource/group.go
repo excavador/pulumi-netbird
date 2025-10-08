@@ -18,10 +18,6 @@ type Group struct {
 
 	// The name of the NetBird group.
 	Name pulumi.StringOutput `pulumi:"name"`
-	// An optional list of peer IDs associated with this group.
-	Peers pulumi.StringArrayOutput `pulumi:"peers"`
-	// An optional list of resources to associate with this group.
-	Resources ResourceArrayOutput `pulumi:"resources"`
 }
 
 // NewGroup registers a new resource with the given unique name, arguments, and options.
@@ -69,20 +65,12 @@ func (GroupState) ElementType() reflect.Type {
 type groupArgs struct {
 	// The name of the NetBird group.
 	Name string `pulumi:"name"`
-	// An optional list of peer IDs to associate with this group.
-	Peers []string `pulumi:"peers"`
-	// An optional list of resources to associate with this group.
-	Resources []Resource `pulumi:"resources"`
 }
 
 // The set of arguments for constructing a Group resource.
 type GroupArgs struct {
 	// The name of the NetBird group.
 	Name pulumi.StringInput
-	// An optional list of peer IDs to associate with this group.
-	Peers pulumi.StringArrayInput
-	// An optional list of resources to associate with this group.
-	Resources ResourceArrayInput
 }
 
 func (GroupArgs) ElementType() reflect.Type {
@@ -175,16 +163,6 @@ func (o GroupOutput) ToGroupOutputWithContext(ctx context.Context) GroupOutput {
 // The name of the NetBird group.
 func (o GroupOutput) Name() pulumi.StringOutput {
 	return o.ApplyT(func(v *Group) pulumi.StringOutput { return v.Name }).(pulumi.StringOutput)
-}
-
-// An optional list of peer IDs associated with this group.
-func (o GroupOutput) Peers() pulumi.StringArrayOutput {
-	return o.ApplyT(func(v *Group) pulumi.StringArrayOutput { return v.Peers }).(pulumi.StringArrayOutput)
-}
-
-// An optional list of resources to associate with this group.
-func (o GroupOutput) Resources() ResourceArrayOutput {
-	return o.ApplyT(func(v *Group) ResourceArrayOutput { return v.Resources }).(ResourceArrayOutput)
 }
 
 type GroupArrayOutput struct{ *pulumi.OutputState }
