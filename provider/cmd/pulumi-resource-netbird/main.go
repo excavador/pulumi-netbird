@@ -5,7 +5,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/mbrav/pulumi-netbird/provider"
+	"github.com/excavador/pulumi-netbird/provider"
 
 	p "github.com/pulumi/pulumi-go-provider"
 )

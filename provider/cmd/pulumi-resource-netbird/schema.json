@@ -10,9 +10,9 @@
   ],
   "homepage": "https://pulumi.com",
   "license": "AGPL-3.0",
-  "repository": "https://github.com/mbrav/pulumi-netbird",
+  "repository": "https://github.com/excavador/pulumi-netbird",
   "logoUrl": "https://raw.githubusercontent.com/mbrav/pulumi-netbird/master/assets/logo.webp",
-  "pluginDownloadURL": "github://api.github.com/mbrav/pulumi-netbird",
+  "pluginDownloadURL": "github://api.github.com/excavador/pulumi-netbird",
   "publisher": "mbrav",
   "namespace": "pulumi",
   "meta": {
@@ -26,7 +26,7 @@
     },
     "go": {
       "generateResourceContainerTypes": true,
-      "importBasePath": "github.com/mbrav/pulumi-netbird/sdk/go/netbird",
+      "importBasePath": "github.com/excavador/pulumi-netbird/sdk/go/netbird",
       "respectSchemaVersion": true
     },
     "java": {

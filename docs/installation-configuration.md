@@ -8,10 +8,7 @@ layout: installation
 
 The NetBird Pulumi provider is available for multiple Pulumi-supported languages. Use the appropriate package for your stack:
 
-- **JavaScript/TypeScript**: [`@mbrav/pulumi-netbird`](#) *(Link pending)*
-- **Python**: [`pulumi_netbird`](https://pypi.org/project/pulumi-netbird/)
-- **Go**: [`github.com/mbrav/pulumi-netbird/sdk/go/netbird`](https://pkg.go.dev/github.com/mbrav/pulumi-netbird/sdk)
-- **.NET**: [`Mbrav.PulimiNetbird`](https://www.nuget.org/packages/Mbrav.PulimiNetbird)
+- **Go**: [`github.com/excavador/pulumi-netbird/sdk/go/netbird`](https://pkg.go.dev/github.com/excavador/
 
 ## Setup
 

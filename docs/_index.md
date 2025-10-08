@@ -17,7 +17,7 @@ You must configure the provider with the proper credentials and endpoint to inte
 package main
 
 import (
-    "github.com/mbrav/pulumi-netbird/sdk/go/netbird/resource"
+    "github.com/excavador/pulumi-netbird/sdk/go/netbird/resource"
     "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 

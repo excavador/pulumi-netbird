@@ -25,7 +25,7 @@ package tests_test
 // 	"github.com/stretchr/testify/assert"
 // 	"github.com/stretchr/testify/require"
 //
-// 	netbird "github.com/mbrav/pulumi-netbird/provider"
+// 	netbird "github.com/excavador/pulumi-netbird/provider"
 // )
 //
 // func TestRandomCreate(t *testing.T) {

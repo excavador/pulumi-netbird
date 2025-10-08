@@ -38,3 +38,4 @@ provider/**/schema-embed
 schema-*.json
 tools
 dist/
+.direnv

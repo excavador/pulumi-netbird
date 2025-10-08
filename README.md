@@ -1,12 +1,12 @@
 # Pulumi NetBird Native Provider
 
 <p align="center">
-    <a href="https://github.com/mbrav/pulumi-netbird" target="_blank" rel="noopener noreferrer">
+    <a href="https://github.com/excavador/pulumi-netbird" target="_blank" rel="noopener noreferrer">
         <img width="100" src="./assets/logo.webp" title="pulumi-netbird"">
     </a>
 </p>
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/mbrav/pulumi-netbird)](https://goreportcard.com/report/github.com/mbrav/pulumi-netbird)
+[![Go Report Card](https://goreportcard.com/badge/github.com/excavador/pulumi-netbird)](https://goreportcard.com/report/github.com/excavador/pulumi-netbird)
 
 [NetBird](https://github.com/netbirdio/netbird) is a modern, WireGuard-based mesh VPN. This provider integrates NetBird into Pulumi for seamless infrastructure automation.
 
@@ -22,7 +22,7 @@ This repository contains the **Pulumi NetBird Provider**, a native Pulumi provid
 To manually install the Pulumi NetBird resource plugin replace the version number (`0.1.0`) with the desired release if needed. The plugin will be downloaded from the specified GitHub repository.
 
 ```bash
-pulumi plugin install resource netbird 0.1.0 --server github://api.github.com/mbrav/pulumi-netbird
+pulumi plugin install resource netbird 0.1.0 --server github://api.github.com/excavador/pulumi-netbird
 ````
 
 ## 🧪 Build and Test
@@ -204,18 +204,18 @@ resources:
 
 You can use this provider with **Pulumi Go** to manage NetBird infrastructure declaratively.
 
-The SDK is accessible through the generated `github.com/mbrav/pulumi-netbird/sdk/go/netbird` module.
+The SDK is accessible through the generated `github.com/excavador/pulumi-netbird/sdk/go/netbird` module.
 
 SDK versions are available to Go with tags that are prefixed with `sdk/vx.x.x` and can be listed with the following command:
 
 ```bash
-go list -m -versions github.com/mbrav/pulumi-netbird/sdk
+go list -m -versions github.com/excavador/pulumi-netbird/sdk
 ```
 
 Output:
 
 ```bash
-github.com/mbrav/pulumi-netbird/sdk v0.0.11 v0.0.12 v0.0.13 # and so on
+github.com/excavador/pulumi-netbird/sdk v0.0.11 v0.0.12 v0.0.13 # and so on
 ```
 
 ### 1. Setup

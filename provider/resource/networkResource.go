@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/mbrav/pulumi-netbird/provider/config"
+	"github.com/excavador/pulumi-netbird/provider/config"
 	nbapi "github.com/netbirdio/netbird/shared/management/http/api"
 	p "github.com/pulumi/pulumi-go-provider"
 	"github.com/pulumi/pulumi-go-provider/infer"

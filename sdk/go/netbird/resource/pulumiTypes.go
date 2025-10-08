@@ -7,7 +7,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/mbrav/pulumi-netbird/sdk/go/netbird/internal"
+	"github.com/excavador/pulumi-netbird/sdk/go/netbird/internal"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
