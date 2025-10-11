@@ -27,7 +27,7 @@
           };
 
           # Provider version from provider.go
-          providerVersion = "0.2.1";
+          providerVersion = "0.2.2";
 
           # Script to build provider binary
           build-provider = pkgs.writeShellScriptBin "build-provider" ''

@@ -301,8 +301,8 @@ github.com/natefinch/atomic v1.0.1 h1:ZPYKxkqQOx3KZ+RsbnP/YsgvxWQPGxjC0oBt2AhwV0
 github.com/natefinch/atomic v1.0.1/go.mod h1:N/D/ELrljoqDyT3rZrsUmtsuzvHkeB/wWjHV22AZRbM=
 github.com/netbirdio/management-integrations/integrations v0.0.0-20250906095204-f87a07690ba0 h1:9BUqQHPVOGr0edk8EifUBUfTr2Ob0ypAPxtasUApBxQ=
 github.com/netbirdio/management-integrations/integrations v0.0.0-20250906095204-f87a07690ba0/go.mod h1:v0nUbbHbuQnqR7yKIYnKzsLBCswLtp2JctmKYmGgVhc=
-github.com/netbirdio/netbird v0.59.4 h1:uQBZIUQMay0YT3isSunsoOJbzz/faSbCOs11oTFg1eE=
-github.com/netbirdio/netbird v0.59.4/go.mod h1:76vOYKEb7qPY4XlOzYocHi5Tf9y5FaL/N6qQ9Blx0C8=
+github.com/netbirdio/netbird v0.59.5 h1:hA4RtE2VIhiv90Auot6DlPiwruc0uXwJQ4CaIYEIv/M=
+github.com/netbirdio/netbird v0.59.5/go.mod h1:76vOYKEb7qPY4XlOzYocHi5Tf9y5FaL/N6qQ9Blx0C8=
 github.com/okta/okta-sdk-golang/v2 v2.18.0 h1:cfDasMb7CShbZvOrF6n+DnLevWwiHgedWMGJ8M8xKDc=
 github.com/okta/okta-sdk-golang/v2 v2.18.0/go.mod h1:dz30v3ctAiMb7jpsCngGfQUAEGm1/NsWT92uTbNDQIs=
 github.com/onsi/gomega v1.34.1 h1:EUMJIKUjM8sKjYbtxQI9A4z2o+rruxnzNvpknOXie6k=
