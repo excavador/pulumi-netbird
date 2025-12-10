@@ -53,8 +53,12 @@ func (*Group) Create(ctx context.Context, req infer.CreateRequest[GroupArgs]) (i
 		return infer.CreateResponse[GroupState]{}, fmt.Errorf("error getting NetBird client: %w", err)
 	}
 
+	var emptyResources []nbapi.Resource
+
 	group, err := client.Groups.Create(ctx, nbapi.GroupRequest{
-		Name: req.Inputs.Name,
+		Name:      req.Inputs.Name,
+		Peers:     nil, // Explicitly nil - peers are managed dynamically, not via IaC (exhaustruct requires field)
+		Resources: &emptyResources,
 	})
 	if err != nil {
 		return infer.CreateResponse[GroupState]{}, fmt.Errorf("creating group failed: %w", err)
@@ -73,15 +77,15 @@ func (*Group) Create(ctx context.Context, req infer.CreateRequest[GroupArgs]) (i
 }
 
 // Read fetches the current state of a group resource from NetBird.
-func (*Group) Read(ctx context.Context, id string, state GroupState) (GroupState, error) {
-	p.GetLogger(ctx).Debugf("Read:Group id=%s", id)
+func (*Group) Read(ctx context.Context, groupID string, state GroupState) (GroupState, error) {
+	p.GetLogger(ctx).Debugf("Read:Group id=%s", groupID)
 
 	client, err := config.GetNetBirdClient(ctx)
 	if err != nil {
 		return state, fmt.Errorf("error getting NetBird client: %w", err)
 	}
 
-	group, err := client.Groups.Get(ctx, id)
+	group, err := client.Groups.Get(ctx, groupID)
 	if err != nil {
 		return state, fmt.Errorf("reading group failed: %w", err)
 	}
@@ -110,8 +114,12 @@ func (*Group) Update(ctx context.Context, req infer.UpdateRequest[GroupArgs, Gro
 		return infer.UpdateResponse[GroupState]{}, fmt.Errorf("error getting NetBird client: %w", err)
 	}
 
+	var emptyResources []nbapi.Resource
+
 	_, err = client.Groups.Update(ctx, req.ID, nbapi.GroupRequest{
-		Name: req.Inputs.Name,
+		Name:      req.Inputs.Name,
+		Peers:     nil, // Explicitly nil - peers are managed dynamically, not via IaC (exhaustruct requires field)
+		Resources: &emptyResources,
 	})
 	if err != nil {
 		return infer.UpdateResponse[GroupState]{}, fmt.Errorf("updating group failed: %w", err)
