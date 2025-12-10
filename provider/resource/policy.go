@@ -602,8 +602,10 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 			input := req.Inputs.Rules[ruleIndex]
 			state := req.State.Rules[ruleIndex]
 
-			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] a=%+v b=%+v", req.ID, ruleIndex, input, state)
+			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] input=%+v state=%+v", req.ID, ruleIndex, input, state)
 
+			// Compare all fields except rule ID (which is API-managed and not part of user inputs)
+			// Note: input.ID may be nil (from Read) or set (from user), but we ignore it in comparison
 			if input.Name != state.Name ||
 				!equalPtr(input.Description, state.Description) ||
 				input.Bidirectional != state.Bidirectional ||
@@ -617,6 +619,21 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 				!equalResourcePtr(input.SourceResource, state.SourceResource) ||
 				!equalResourcePtr(input.DestinationResource, state.DestinationResource) {
 				equal = false
+
+				p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] differs - Name:%v Desc:%v Bidir:%v Action:%v Enabled:%v Protocol:%v Ports:%v PortRanges:%v Sources:%v Destinations:%v SrcRes:%v DstRes:%v",
+					req.ID, ruleIndex,
+					input.Name != state.Name,
+					!equalPtr(input.Description, state.Description),
+					input.Bidirectional != state.Bidirectional,
+					input.Action != state.Action,
+					input.Enabled != state.Enabled,
+					input.Protocol != state.Protocol,
+					!equalSlicePtr(input.Ports, state.Ports),
+					!equalPortRangePtr(input.PortRanges, state.PortRanges),
+					!equalSlicePtr(input.Sources, toGroupIDs(state.Sources)),
+					!equalSlicePtr(input.Destinations, toGroupIDs(state.Destinations)),
+					!equalResourcePtr(input.SourceResource, state.SourceResource),
+					!equalResourcePtr(input.DestinationResource, state.DestinationResource))
 
 				break
 			}
