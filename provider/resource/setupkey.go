@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/excavador/pulumi-netbird/provider/config"
@@ -9,6 +10,8 @@ import (
 	p "github.com/pulumi/pulumi-go-provider"
 	"github.com/pulumi/pulumi-go-provider/infer"
 )
+
+const setupKeyStateValid = "valid"
 
 /* ---------- Resource ---------- */
 
@@ -34,19 +37,20 @@ type SetupKeyArgs struct {
 }
 
 // Annotate provides documentation for SetupKeyArgs fields.
-func (a *SetupKeyArgs) Annotate(an infer.Annotator) {
-	an.Describe(&a.Name, "Setup key name.")
-	an.Describe(&a.Type, "Setup key type: 'one-off' or 'reusable'.")
-	an.Describe(&a.ExpiresIn, "Expiration time in seconds.")
-	an.Describe(&a.AutoGroups, "List of group IDs to auto-assign to peers.")
-	an.Describe(&a.UsageLimit, "Usage limit (0 = unlimited).")
-	an.Describe(&a.Ephemeral, "Whether peers registered with this key are ephemeral.")
-	an.Describe(&a.AllowExtraDNSLabels, "Allow extra DNS labels to be added to peers.")
+func (a *SetupKeyArgs) Annotate(annotator infer.Annotator) {
+	annotator.Describe(&a.Name, "Setup key name.")
+	annotator.Describe(&a.Type, "Setup key type: 'one-off' or 'reusable'.")
+	annotator.Describe(&a.ExpiresIn, "Expiration time in seconds.")
+	annotator.Describe(&a.AutoGroups, "List of group IDs to auto-assign to peers.")
+	annotator.Describe(&a.UsageLimit, "Usage limit (0 = unlimited).")
+	annotator.Describe(&a.Ephemeral, "Whether peers registered with this key are ephemeral.")
+	annotator.Describe(&a.AllowExtraDNSLabels, "Allow extra DNS labels to be added to peers.")
 }
 
 // SetupKeyState represents the state/output of a setup key resource.
 type SetupKeyState struct {
 	SetupKeyArgs
+
 	Key       *string `pulumi:"key,optional"`
 	Valid     *bool   `pulumi:"valid,optional"`
 	Revoked   *bool   `pulumi:"revoked,optional"`
@@ -68,6 +72,14 @@ func (*SetupKey) Create(ctx context.Context, req infer.CreateRequest[SetupKeyArg
 			ID: "preview",
 			Output: SetupKeyState{
 				SetupKeyArgs: req.Inputs,
+				Key:          nil,
+				Valid:        nil,
+				Revoked:      nil,
+				UsedTimes:    nil,
+				LastUsed:     nil,
+				Expires:      nil,
+				State:        nil,
+				UpdatedAt:    nil,
 			},
 		}, nil
 	}
@@ -105,7 +117,7 @@ func (*SetupKey) Create(ctx context.Context, req infer.CreateRequest[SetupKeyArg
 	usedTimes := setupKey.UsedTimes
 
 	// Note: SetupKey doesn't have a Valid field in the API, using State instead
-	valid := state == "valid"
+	valid := state == setupKeyStateValid
 
 	stateObj := SetupKeyState{
 		SetupKeyArgs: req.Inputs,
@@ -126,15 +138,15 @@ func (*SetupKey) Create(ctx context.Context, req infer.CreateRequest[SetupKeyArg
 }
 
 // Read fetches the current state of a setup key resource from NetBird.
-func (*SetupKey) Read(ctx context.Context, id string, state SetupKeyState) (SetupKeyState, error) {
-	p.GetLogger(ctx).Debugf("Read:SetupKey id=%s", id)
+func (*SetupKey) Read(ctx context.Context, setupKeyID string, state SetupKeyState) (SetupKeyState, error) {
+	p.GetLogger(ctx).Debugf("Read:SetupKey id=%s", setupKeyID)
 
 	client, err := config.GetNetBirdClient(ctx)
 	if err != nil {
 		return state, fmt.Errorf("error getting NetBird client: %w", err)
 	}
 
-	setupKey, err := client.SetupKeys.Get(ctx, id)
+	setupKey, err := client.SetupKeys.Get(ctx, setupKeyID)
 	if err != nil {
 		return state, fmt.Errorf("reading setup key failed: %w", err)
 	}
@@ -165,7 +177,7 @@ func (*SetupKey) Read(ctx context.Context, id string, state SetupKeyState) (Setu
 	state.State = &stateStr
 	updatedAt := setupKey.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
 	state.UpdatedAt = &updatedAt
-	valid := stateStr == "valid"
+	valid := stateStr == setupKeyStateValid
 	state.Valid = &valid
 
 	return state, nil
@@ -183,13 +195,22 @@ func (*SetupKey) Update(ctx context.Context, req infer.UpdateRequest[SetupKeyArg
 		boolVal(req.Inputs.Ephemeral) != boolVal(req.State.Ephemeral) ||
 		boolVal(req.Inputs.AllowExtraDNSLabels) != boolVal(req.State.AllowExtraDNSLabels) {
 		p.GetLogger(ctx).Warningf("Update:SetupKey[%s] non-updatable fields changed, resource needs replacement", req.ID)
-		return infer.UpdateResponse[SetupKeyState]{}, fmt.Errorf("non-updatable fields changed, resource needs replacement")
+
+		return infer.UpdateResponse[SetupKeyState]{}, errors.New("non-updatable fields changed, resource needs replacement")
 	}
 
 	if req.DryRun {
 		return infer.UpdateResponse[SetupKeyState]{
 			Output: SetupKeyState{
 				SetupKeyArgs: req.Inputs,
+				Key:          nil,
+				Valid:        nil,
+				Revoked:      nil,
+				UsedTimes:    nil,
+				LastUsed:     nil,
+				Expires:      nil,
+				State:        nil,
+				UpdatedAt:    nil,
 			},
 		}, nil
 	}
@@ -216,7 +237,7 @@ func (*SetupKey) Update(ctx context.Context, req infer.UpdateRequest[SetupKeyArg
 	out.Revoked = &revoked
 	stateStr := updated.State
 	out.State = &stateStr
-	valid := stateStr == "valid"
+	valid := stateStr == setupKeyStateValid
 	out.Valid = &valid
 	updatedAt := updated.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
 	out.UpdatedAt = &updatedAt
@@ -248,5 +269,6 @@ func boolVal(p *bool) bool {
 	if p == nil {
 		return false
 	}
+
 	return *p
 }

@@ -331,7 +331,37 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 	}
 
 	rules := make([]PolicyRuleState, len(policy.Rules))
+	inputRules := make([]PolicyRuleArgs, len(policy.Rules))
+
 	for ruleIndex, rule := range policy.Rules {
+		// Convert API groups to RuleGroup objects for state
+		sources := fromAPIGroupMinimums(rule.Sources)
+		destinations := fromAPIGroupMinimums(rule.Destinations)
+
+		// Convert RuleGroup objects to string IDs for inputs
+		var sourceIDs *[]string
+
+		if sources != nil {
+			ids := make([]string, len(*sources))
+			for i, g := range *sources {
+				ids[i] = g.ID
+			}
+
+			sourceIDs = &ids
+		}
+
+		var destIDs *[]string
+
+		if destinations != nil {
+			ids := make([]string, len(*destinations))
+			for i, g := range *destinations {
+				ids[i] = g.ID
+			}
+
+			destIDs = &ids
+		}
+
+		// Build state (with RuleGroup objects)
 		rules[ruleIndex] = PolicyRuleState{
 			ID:                  rule.Id,
 			Name:                rule.Name,
@@ -342,8 +372,25 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 			Protocol:            Protocol(rule.Protocol),
 			Ports:               rule.Ports,
 			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             fromAPIGroupMinimums(rule.Sources),
-			Destinations:        fromAPIGroupMinimums(rule.Destinations),
+			Sources:             sources,
+			Destinations:        destinations,
+			SourceResource:      fromAPIResource(rule.SourceResource),
+			DestinationResource: fromAPIResource(rule.DestinationResource),
+		}
+
+		// Build inputs (with string IDs, no rule ID)
+		inputRules[ruleIndex] = PolicyRuleArgs{
+			ID:                  nil, // Don't include rule ID in inputs
+			Name:                rule.Name,
+			Description:         rule.Description,
+			Bidirectional:       rule.Bidirectional,
+			Action:              RuleAction(rule.Action),
+			Enabled:             rule.Enabled,
+			Protocol:            Protocol(rule.Protocol),
+			Ports:               rule.Ports,
+			PortRanges:          fromAPIPortRanges(rule.PortRanges),
+			Sources:             sourceIDs,
+			Destinations:        destIDs,
 			SourceResource:      fromAPIResource(rule.SourceResource),
 			DestinationResource: fromAPIResource(rule.DestinationResource),
 		}
@@ -355,7 +402,7 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 			Name:                policy.Name,
 			Description:         policy.Description,
 			Enabled:             policy.Enabled,
-			Rules:               req.Inputs.Rules, // Not strictly accurate; optional improvement: reconstruct from `policy.Rules`
+			Rules:               inputRules,
 			SourcePostureChecks: &policy.SourcePostureChecks,
 		},
 		State: PolicyState{
@@ -431,10 +478,17 @@ func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, P
 	}
 
 	// Convert input rules to nbapi.PolicyRuleUpdate
+	// Use rule IDs from state if not provided in inputs (for existing rules)
 	apiRules := make([]nbapi.PolicyRuleUpdate, len(req.Inputs.Rules))
 	for ruleIndex, rule := range req.Inputs.Rules {
+		ruleID := rule.ID
+		// If rule ID not in inputs, try to get it from state (for existing rules)
+		if ruleID == nil && ruleIndex < len(req.State.Rules) {
+			ruleID = req.State.Rules[ruleIndex].ID
+		}
+
 		apiRules[ruleIndex] = nbapi.PolicyRuleUpdate{
-			Id:                  rule.ID,
+			Id:                  ruleID,
 			Name:                rule.Name,
 			Description:         rule.Description,
 			Bidirectional:       rule.Bidirectional,

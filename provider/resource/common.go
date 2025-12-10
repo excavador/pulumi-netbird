@@ -51,7 +51,8 @@ func toAPIResource(resource *Resource) *nbapi.Resource {
 
 // Converts a slice of *Resource to a pointer to a slice of nbapi.Resource.
 // Returns nil if the input is nil.
-func toAPIResourceList(resources *[]Resource) *[]nbapi.Resource {
+// This function is kept for potential future use.
+func toAPIResourceList(resources *[]Resource) *[]nbapi.Resource { //nolint:unused
 	if resources == nil {
 		return nil
 	}
@@ -78,7 +79,8 @@ func fromAPIResource(apiResource *nbapi.Resource) *Resource {
 
 // Converts a slice of nbapi.Resource to a pointer to a slice of Resource.
 // Returns nil if the input is nil.
-func fromAPIResourceList(apiResources *[]nbapi.Resource) *[]Resource {
+// This function is kept for potential future use.
+func fromAPIResourceList(apiResources *[]nbapi.Resource) *[]Resource { //nolint:unused
 	if apiResources == nil {
 		return nil
 	}
