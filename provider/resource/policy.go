@@ -334,6 +334,17 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 	inputRules := make([]PolicyRuleArgs, len(policy.Rules))
 
 	for ruleIndex, rule := range policy.Rules {
+		// Log what API returns for debugging
+		var apiSourcesStr string
+		if rule.Sources == nil {
+			apiSourcesStr = "nil"
+		} else if len(*rule.Sources) == 0 {
+			apiSourcesStr = "[]"
+		} else {
+			apiSourcesStr = fmt.Sprintf("%v", *rule.Sources)
+		}
+		p.GetLogger(ctx).Debugf("Read:Policy[%s]:Rules[%d] API returned Sources=%s", req.ID, ruleIndex, apiSourcesStr)
+
 		// Convert API groups to RuleGroup objects for state
 		sources := fromAPIGroupMinimums(rule.Sources)
 		destinations := fromAPIGroupMinimums(rule.Destinations)
@@ -518,6 +529,43 @@ func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, P
 	// Convert updated rules to PolicyRuleState
 	rules := make([]PolicyRuleState, len(updated.Rules))
 	for ruleIndex, rule := range updated.Rules {
+		// Log what API returns after Update for debugging
+		var apiSourcesStr string
+		if rule.Sources == nil {
+			apiSourcesStr = "nil"
+		} else if len(*rule.Sources) == 0 {
+			apiSourcesStr = "[]"
+		} else {
+			apiSourcesStr = fmt.Sprintf("%v", *rule.Sources)
+		}
+		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] API returned Sources=%s after update", req.ID, ruleIndex, apiSourcesStr)
+
+		// Handle case where API returns nil sources but we sent sources
+		// Reconstruct from inputs to ensure state consistency
+		sources := fromAPIGroupMinimums(rule.Sources)
+		if sources == nil && ruleIndex < len(req.Inputs.Rules) && req.Inputs.Rules[ruleIndex].Sources != nil {
+			// API returned nil sources but we sent sources - reconstruct from inputs
+			inputSources := req.Inputs.Rules[ruleIndex].Sources
+			reconstructed := make([]RuleGroup, len(*inputSources))
+			for i, id := range *inputSources {
+				reconstructed[i] = RuleGroup{ID: id, Name: ""} // Name will be filled on next Read
+			}
+			sources = &reconstructed
+			p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] reconstructed Sources from inputs (API returned nil)", req.ID, ruleIndex)
+		}
+
+		destinations := fromAPIGroupMinimums(rule.Destinations)
+		if destinations == nil && ruleIndex < len(req.Inputs.Rules) && req.Inputs.Rules[ruleIndex].Destinations != nil {
+			// API returned nil destinations but we sent destinations - reconstruct from inputs
+			inputDests := req.Inputs.Rules[ruleIndex].Destinations
+			reconstructed := make([]RuleGroup, len(*inputDests))
+			for i, id := range *inputDests {
+				reconstructed[i] = RuleGroup{ID: id, Name: ""} // Name will be filled on next Read
+			}
+			destinations = &reconstructed
+			p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] reconstructed Destinations from inputs (API returned nil)", req.ID, ruleIndex)
+		}
+
 		rules[ruleIndex] = PolicyRuleState{
 			ID:                  rule.Id,
 			Name:                rule.Name,
@@ -528,8 +576,8 @@ func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, P
 			Protocol:            Protocol(rule.Protocol),
 			Ports:               rule.Ports,
 			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             fromAPIGroupMinimums(rule.Sources),
-			Destinations:        fromAPIGroupMinimums(rule.Destinations),
+			Sources:             sources,
+			Destinations:        destinations,
 			SourceResource:      fromAPIResource(rule.SourceResource),
 			DestinationResource: fromAPIResource(rule.DestinationResource),
 		}
@@ -604,6 +652,39 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 
 			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] input=%+v state=%+v", req.ID, ruleIndex, input, state)
 
+			// Convert state RuleGroups to string IDs for comparison (cache to avoid multiple calls)
+			stateSourceIDs := toGroupIDs(state.Sources)
+			stateDestIDs := toGroupIDs(state.Destinations)
+
+			// Log actual values being compared for debugging
+			var inputSourcesStr, stateSourcesStr string
+			if input.Sources == nil {
+				inputSourcesStr = "nil"
+			} else {
+				inputSourcesStr = fmt.Sprintf("%v", *input.Sources)
+			}
+			if stateSourceIDs == nil {
+				stateSourcesStr = "nil"
+			} else {
+				stateSourcesStr = fmt.Sprintf("%v", *stateSourceIDs)
+			}
+			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Sources - input=%s stateConverted=%s equal=%v",
+				req.ID, ruleIndex, inputSourcesStr, stateSourcesStr, equalSlicePtr(input.Sources, stateSourceIDs))
+
+			var inputDestsStr, stateDestsStr string
+			if input.Destinations == nil {
+				inputDestsStr = "nil"
+			} else {
+				inputDestsStr = fmt.Sprintf("%v", *input.Destinations)
+			}
+			if stateDestIDs == nil {
+				stateDestsStr = "nil"
+			} else {
+				stateDestsStr = fmt.Sprintf("%v", *stateDestIDs)
+			}
+			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Destinations - input=%s stateConverted=%s equal=%v",
+				req.ID, ruleIndex, inputDestsStr, stateDestsStr, equalSlicePtr(input.Destinations, stateDestIDs))
+
 			// Compare all fields except rule ID (which is API-managed and not part of user inputs)
 			// Note: input.ID may be nil (from Read) or set (from user), but we ignore it in comparison
 			if input.Name != state.Name ||
@@ -614,8 +695,8 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 				input.Protocol != state.Protocol ||
 				!equalSlicePtr(input.Ports, state.Ports) ||
 				!equalPortRangePtr(input.PortRanges, state.PortRanges) ||
-				!equalSlicePtr(input.Sources, toGroupIDs(state.Sources)) ||
-				!equalSlicePtr(input.Destinations, toGroupIDs(state.Destinations)) ||
+				!equalSlicePtr(input.Sources, stateSourceIDs) ||
+				!equalSlicePtr(input.Destinations, stateDestIDs) ||
 				!equalResourcePtr(input.SourceResource, state.SourceResource) ||
 				!equalResourcePtr(input.DestinationResource, state.DestinationResource) {
 				equal = false
@@ -630,8 +711,8 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 					input.Protocol != state.Protocol,
 					!equalSlicePtr(input.Ports, state.Ports),
 					!equalPortRangePtr(input.PortRanges, state.PortRanges),
-					!equalSlicePtr(input.Sources, toGroupIDs(state.Sources)),
-					!equalSlicePtr(input.Destinations, toGroupIDs(state.Destinations)),
+					!equalSlicePtr(input.Sources, stateSourceIDs),
+					!equalSlicePtr(input.Destinations, stateDestIDs),
 					!equalResourcePtr(input.SourceResource, state.SourceResource),
 					!equalResourcePtr(input.DestinationResource, state.DestinationResource))
 
