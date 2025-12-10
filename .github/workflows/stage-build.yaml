@@ -59,7 +59,25 @@ jobs:
           echo "✅ Succesfully installed pulumictl v${RESULT_VERSION}"
 
       - name: Cross build binaries 📦
-        run: make cross_build
+        env:
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          PROVIDER_VERSION="0.2.3"
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            GOOS=${platform%/*}
+            GOARCH=${platform#*/}
+            BINARY_NAME="pulumi-resource-netbird"
+            if [ "$GOOS" = "windows" ]; then
+              BINARY_NAME="${BINARY_NAME}.exe"
+            fi
+            go build -o "dist/${BINARY_NAME}" ./provider/cmd/pulumi-resource-netbird
+            ARCHIVE_NAME="pulumi-resource-netbird-v${PROVIDER_VERSION}-${GOOS}-${GOARCH}.tar.gz"
+            tar -czf "dist/${ARCHIVE_NAME}" -C dist "${BINARY_NAME}"
+            rm "dist/${BINARY_NAME}"
+          done
+          # Create checksums
+          cd dist && sha256sum *.tar.gz > checksums.txt
 
       - name: Publish release with assets 📢
         uses: softprops/action-gh-release@v2

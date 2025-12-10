@@ -27,9 +27,36 @@ pulumi plugin install resource netbird 0.1.0 --server github://api.github.com/ex
 
 ## 🧪 Build and Test
 
+This project uses [devbox](https://www.jetpack.io/devbox) for reproducible development environments. All commands should be run via devbox:
+
 ```bash
-make help                 # View available build/test commands
-````
+# Setup development environment (first time only)
+devbox shell
+
+# View available commands
+devbox run -- just --list
+
+# Quick start: build, install, and generate Go SDK
+devbox run -- just setup-provider
+
+# Build provider binary
+devbox run -- just build-provider
+
+# Install provider plugin
+devbox run -- just install-provider
+
+# Generate SDKs
+devbox run -- just gen-sdk-go          # Go SDK
+devbox run -- just gen-sdk-python      # Python SDK
+devbox run -- just gen-sdk-nodejs      # TypeScript SDK
+devbox run -- just gen-sdk-all         # All SDKs
+
+# Development commands
+devbox run -- just build               # Build all packages
+devbox run -- just test                # Run tests
+devbox run -- just lint                # Run linter
+devbox run -- just check               # Run all checks
+```
 
 ## 🚀 Example Usage with Pulumi YAML
 
@@ -249,8 +276,8 @@ You can use this provider with **Pulumi Python** to manage NetBird infrastructur
 First, you must generate the python SDK:
 
 ```bash
-make provider 
-make sdk_python
+devbox run -- just build-provider
+devbox run -- just gen-sdk-python
 ```
 
 Then install the wheel:
