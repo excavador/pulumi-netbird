@@ -19,13 +19,13 @@ type User struct {
 	// Groups this user’s peers are automatically assigned to.
 	Auto_groups pulumi.StringArrayOutput `pulumi:"auto_groups"`
 	// Indicates whether the user is blocked from accessing the system
-	Blocked pulumi.BoolOutput `pulumi:"blocked"`
+	Blocked pulumi.BoolPtrOutput `pulumi:"blocked"`
 	// Email address of the user.
-	Email pulumi.StringOutput `pulumi:"email"`
+	Email pulumi.StringPtrOutput `pulumi:"email"`
 	// Whether this user is a service identity.
 	Is_service_user pulumi.BoolOutput `pulumi:"is_service_user"`
 	// Full name of the user.
-	Name pulumi.StringOutput `pulumi:"name"`
+	Name pulumi.StringPtrOutput `pulumi:"name"`
 	// NetBird account role assigned to the user.
 	Role pulumi.StringOutput `pulumi:"role"`
 }
@@ -211,13 +211,13 @@ func (o UserOutput) Auto_groups() pulumi.StringArrayOutput {
 }
 
 // Indicates whether the user is blocked from accessing the system
-func (o UserOutput) Blocked() pulumi.BoolOutput {
-	return o.ApplyT(func(v *User) pulumi.BoolOutput { return v.Blocked }).(pulumi.BoolOutput)
+func (o UserOutput) Blocked() pulumi.BoolPtrOutput {
+	return o.ApplyT(func(v *User) pulumi.BoolPtrOutput { return v.Blocked }).(pulumi.BoolPtrOutput)
 }
 
 // Email address of the user.
-func (o UserOutput) Email() pulumi.StringOutput {
-	return o.ApplyT(func(v *User) pulumi.StringOutput { return v.Email }).(pulumi.StringOutput)
+func (o UserOutput) Email() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v *User) pulumi.StringPtrOutput { return v.Email }).(pulumi.StringPtrOutput)
 }
 
 // Whether this user is a service identity.
@@ -226,8 +226,8 @@ func (o UserOutput) Is_service_user() pulumi.BoolOutput {
 }
 
 // Full name of the user.
-func (o UserOutput) Name() pulumi.StringOutput {
-	return o.ApplyT(func(v *User) pulumi.StringOutput { return v.Name }).(pulumi.StringOutput)
+func (o UserOutput) Name() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v *User) pulumi.StringPtrOutput { return v.Name }).(pulumi.StringPtrOutput)
 }
 
 // NetBird account role assigned to the user.

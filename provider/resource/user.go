@@ -47,12 +47,12 @@ func (user *UserArgs) Annotate(annotator infer.Annotator) {
 
 // UserState represents the stored state of a NetBird user in Pulumi.
 type UserState struct {
-	Email         *string  `pulumi:"email"`
-	Name          *string  `pulumi:"name"`
+	Email         *string  `pulumi:"email,optional"`
+	Name          *string  `pulumi:"name,optional"`
 	Role          string   `pulumi:"role"`
 	IsServiceUser bool     `pulumi:"is_service_user"`
 	AutoGroups    []string `pulumi:"auto_groups"`
-	IsBlocked     *bool    `pulumi:"blocked"`
+	IsBlocked     *bool    `pulumi:"blocked,optional"`
 }
 
 // Annotate documents the stored state for the Pulumi schema.
