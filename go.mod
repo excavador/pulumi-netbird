@@ -3,7 +3,7 @@ module github.com/excavador/pulumi-netbird
 go 1.25.1
 
 require (
-	github.com/netbirdio/netbird v0.60.7
+	github.com/netbirdio/netbird v0.60.8
 	github.com/pulumi/pulumi-go-provider v1.2.0
 	github.com/pulumi/pulumi/sdk/v3 v3.213.0
 )
