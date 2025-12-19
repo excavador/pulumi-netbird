@@ -45,6 +45,7 @@ func Provider() p.Provider { //nolint:funlen
 			infer.Resource(&resource.Peer{}),
 			infer.Resource(&resource.Policy{}),
 			infer.Resource(&resource.SetupKey{}),
+			infer.Resource(&resource.Token{}),
 			infer.Resource(&resource.User{}),
 		).
 		// WithComponents(

@@ -12,6 +12,9 @@ import (
 
 // TEST: InputDiff: false
 
+// debugNilStr is used for debug logging when a value is nil.
+const debugNilStr = "nil"
+
 // Policy defines the Pulumi resource handler for NetBird policy resources.
 type Policy struct{}
 
@@ -335,14 +338,8 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 
 	for ruleIndex, rule := range policy.Rules {
 		// Log what API returns for debugging
-		var apiSourcesStr string
-		if rule.Sources == nil {
-			apiSourcesStr = "nil"
-		} else if len(*rule.Sources) == 0 {
-			apiSourcesStr = "[]"
-		} else {
-			apiSourcesStr = fmt.Sprintf("%v", *rule.Sources)
-		}
+		apiSourcesStr := formatSliceForDebug(rule.Sources)
+
 		p.GetLogger(ctx).Debugf("Read:Policy[%s]:Rules[%d] API returned Sources=%s", req.ID, ruleIndex, apiSourcesStr)
 
 		// Convert API groups to RuleGroup objects for state
@@ -431,46 +428,7 @@ func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, P
 	p.GetLogger(ctx).Debugf("Update:Policy[%s]", req.ID)
 
 	if req.DryRun {
-		// Construct PolicyRuleState for preview output
-		rules := make([]PolicyRuleState, len(req.Inputs.Rules))
-
-		for ruleIndex, rule := range req.Inputs.Rules {
-			var sources, destinations *[]RuleGroup
-
-			if rule.Sources != nil {
-				groups := make([]RuleGroup, len(*rule.Sources))
-				for j, g := range *rule.Sources {
-					groups[j] = RuleGroup{Name: "preview", ID: g}
-				}
-
-				sources = &groups
-			}
-
-			if rule.Destinations != nil {
-				groups := make([]RuleGroup, len(*rule.Destinations))
-				for j, g := range *rule.Destinations {
-					groups[j] = RuleGroup{Name: "preview", ID: g}
-				}
-
-				destinations = &groups
-			}
-
-			rules[ruleIndex] = PolicyRuleState{
-				ID:                  rule.ID,
-				Name:                rule.Name,
-				Description:         rule.Description,
-				Bidirectional:       rule.Bidirectional,
-				Action:              rule.Action,
-				Enabled:             rule.Enabled,
-				Protocol:            rule.Protocol,
-				Ports:               rule.Ports,
-				PortRanges:          rule.PortRanges,
-				Sources:             sources,
-				Destinations:        destinations,
-				SourceResource:      rule.SourceResource,
-				DestinationResource: rule.DestinationResource,
-			}
-		}
+		rules := buildPreviewRuleStates(req.Inputs.Rules)
 
 		return infer.UpdateResponse[PolicyState]{
 			Output: PolicyState{
@@ -488,32 +446,7 @@ func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, P
 		return infer.UpdateResponse[PolicyState]{}, fmt.Errorf("error getting NetBird client: %w", err)
 	}
 
-	// Convert input rules to nbapi.PolicyRuleUpdate
-	// Use rule IDs from state if not provided in inputs (for existing rules)
-	apiRules := make([]nbapi.PolicyRuleUpdate, len(req.Inputs.Rules))
-	for ruleIndex, rule := range req.Inputs.Rules {
-		ruleID := rule.ID
-		// If rule ID not in inputs, try to get it from state (for existing rules)
-		if ruleID == nil && ruleIndex < len(req.State.Rules) {
-			ruleID = req.State.Rules[ruleIndex].ID
-		}
-
-		apiRules[ruleIndex] = nbapi.PolicyRuleUpdate{
-			Id:                  ruleID,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              nbapi.PolicyRuleUpdateAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            nbapi.PolicyRuleUpdateProtocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          toAPIPortRanges(rule.PortRanges),
-			Sources:             rule.Sources,
-			Destinations:        rule.Destinations,
-			SourceResource:      toAPIResource(rule.SourceResource),
-			DestinationResource: toAPIResource(rule.DestinationResource),
-		}
-	}
+	apiRules := buildAPIRulesForUpdate(req.Inputs.Rules, req.State.Rules)
 
 	updated, err := client.Policies.Update(ctx, req.ID, nbapi.PolicyCreate{
 		Name:                req.Inputs.Name,
@@ -526,62 +459,7 @@ func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, P
 		return infer.UpdateResponse[PolicyState]{}, fmt.Errorf("updating policy failed: %w", err)
 	}
 
-	// Convert updated rules to PolicyRuleState
-	rules := make([]PolicyRuleState, len(updated.Rules))
-	for ruleIndex, rule := range updated.Rules {
-		// Log what API returns after Update for debugging
-		var apiSourcesStr string
-		if rule.Sources == nil {
-			apiSourcesStr = "nil"
-		} else if len(*rule.Sources) == 0 {
-			apiSourcesStr = "[]"
-		} else {
-			apiSourcesStr = fmt.Sprintf("%v", *rule.Sources)
-		}
-		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] API returned Sources=%s after update", req.ID, ruleIndex, apiSourcesStr)
-
-		// Handle case where API returns nil sources but we sent sources
-		// Reconstruct from inputs to ensure state consistency
-		sources := fromAPIGroupMinimums(rule.Sources)
-		if sources == nil && ruleIndex < len(req.Inputs.Rules) && req.Inputs.Rules[ruleIndex].Sources != nil {
-			// API returned nil sources but we sent sources - reconstruct from inputs
-			inputSources := req.Inputs.Rules[ruleIndex].Sources
-			reconstructed := make([]RuleGroup, len(*inputSources))
-			for i, id := range *inputSources {
-				reconstructed[i] = RuleGroup{ID: id, Name: ""} // Name will be filled on next Read
-			}
-			sources = &reconstructed
-			p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] reconstructed Sources from inputs (API returned nil)", req.ID, ruleIndex)
-		}
-
-		destinations := fromAPIGroupMinimums(rule.Destinations)
-		if destinations == nil && ruleIndex < len(req.Inputs.Rules) && req.Inputs.Rules[ruleIndex].Destinations != nil {
-			// API returned nil destinations but we sent destinations - reconstruct from inputs
-			inputDests := req.Inputs.Rules[ruleIndex].Destinations
-			reconstructed := make([]RuleGroup, len(*inputDests))
-			for i, id := range *inputDests {
-				reconstructed[i] = RuleGroup{ID: id, Name: ""} // Name will be filled on next Read
-			}
-			destinations = &reconstructed
-			p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] reconstructed Destinations from inputs (API returned nil)", req.ID, ruleIndex)
-		}
-
-		rules[ruleIndex] = PolicyRuleState{
-			ID:                  rule.Id,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              RuleAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            Protocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             sources,
-			Destinations:        destinations,
-			SourceResource:      fromAPIResource(rule.SourceResource),
-			DestinationResource: fromAPIResource(rule.DestinationResource),
-		}
-	}
+	rules := buildRuleStatesFromAPIResponse(ctx, req.ID, updated.Rules, req.Inputs.Rules)
 
 	return infer.UpdateResponse[PolicyState]{
 		Output: PolicyState{
@@ -657,31 +535,15 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 			stateDestIDs := toGroupIDs(state.Destinations)
 
 			// Log actual values being compared for debugging
-			var inputSourcesStr, stateSourcesStr string
-			if input.Sources == nil {
-				inputSourcesStr = "nil"
-			} else {
-				inputSourcesStr = fmt.Sprintf("%v", *input.Sources)
-			}
-			if stateSourceIDs == nil {
-				stateSourcesStr = "nil"
-			} else {
-				stateSourcesStr = fmt.Sprintf("%v", *stateSourceIDs)
-			}
+			inputSourcesStr := formatStringSliceForDebug(input.Sources)
+			stateSourcesStr := formatStringSliceForDebug(stateSourceIDs)
+
 			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Sources - input=%s stateConverted=%s equal=%v",
 				req.ID, ruleIndex, inputSourcesStr, stateSourcesStr, equalSlicePtr(input.Sources, stateSourceIDs))
 
-			var inputDestsStr, stateDestsStr string
-			if input.Destinations == nil {
-				inputDestsStr = "nil"
-			} else {
-				inputDestsStr = fmt.Sprintf("%v", *input.Destinations)
-			}
-			if stateDestIDs == nil {
-				stateDestsStr = "nil"
-			} else {
-				stateDestsStr = fmt.Sprintf("%v", *stateDestIDs)
-			}
+			inputDestsStr := formatStringSliceForDebug(input.Destinations)
+			stateDestsStr := formatStringSliceForDebug(stateDestIDs)
+
 			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Destinations - input=%s stateConverted=%s equal=%v",
 				req.ID, ruleIndex, inputDestsStr, stateDestsStr, equalSlicePtr(input.Destinations, stateDestIDs))
 
@@ -835,4 +697,176 @@ func equalPortRangePtr(portRangeA, portRangeB *[]RulePortRange) bool {
 	}
 
 	return true
+}
+
+// formatSliceForDebug formats a GroupMinimum slice for debug logging.
+func formatSliceForDebug(groups *[]nbapi.GroupMinimum) string {
+	switch {
+	case groups == nil:
+		return debugNilStr
+	case len(*groups) == 0:
+		return "[]"
+	default:
+		return fmt.Sprintf("%v", *groups)
+	}
+}
+
+// formatStringSliceForDebug formats a string slice for debug logging.
+func formatStringSliceForDebug(slice *[]string) string {
+	if slice == nil {
+		return debugNilStr
+	}
+
+	return fmt.Sprintf("%v", *slice)
+}
+
+// buildPreviewRuleStates constructs PolicyRuleState slice for dry-run/preview mode.
+func buildPreviewRuleStates(inputRules []PolicyRuleArgs) []PolicyRuleState {
+	rules := make([]PolicyRuleState, len(inputRules))
+
+	for ruleIndex, rule := range inputRules {
+		sources := buildPreviewGroups(rule.Sources)
+		destinations := buildPreviewGroups(rule.Destinations)
+
+		rules[ruleIndex] = PolicyRuleState{
+			ID:                  rule.ID,
+			Name:                rule.Name,
+			Description:         rule.Description,
+			Bidirectional:       rule.Bidirectional,
+			Action:              rule.Action,
+			Enabled:             rule.Enabled,
+			Protocol:            rule.Protocol,
+			Ports:               rule.Ports,
+			PortRanges:          rule.PortRanges,
+			Sources:             sources,
+			Destinations:        destinations,
+			SourceResource:      rule.SourceResource,
+			DestinationResource: rule.DestinationResource,
+		}
+	}
+
+	return rules
+}
+
+// buildPreviewGroups creates preview RuleGroup slice from string IDs.
+func buildPreviewGroups(ids *[]string) *[]RuleGroup {
+	if ids == nil {
+		return nil
+	}
+
+	groups := make([]RuleGroup, len(*ids))
+	for j, g := range *ids {
+		groups[j] = RuleGroup{Name: "preview", ID: g}
+	}
+
+	return &groups
+}
+
+// buildAPIRulesForUpdate converts input rules to API format for update.
+func buildAPIRulesForUpdate(inputRules []PolicyRuleArgs, stateRules []PolicyRuleState) []nbapi.PolicyRuleUpdate {
+	apiRules := make([]nbapi.PolicyRuleUpdate, len(inputRules))
+
+	for ruleIndex, rule := range inputRules {
+		ruleID := rule.ID
+		// If rule ID not in inputs, try to get it from state (for existing rules)
+		if ruleID == nil && ruleIndex < len(stateRules) {
+			ruleID = stateRules[ruleIndex].ID
+		}
+
+		apiRules[ruleIndex] = nbapi.PolicyRuleUpdate{
+			Id:                  ruleID,
+			Name:                rule.Name,
+			Description:         rule.Description,
+			Bidirectional:       rule.Bidirectional,
+			Action:              nbapi.PolicyRuleUpdateAction(rule.Action),
+			Enabled:             rule.Enabled,
+			Protocol:            nbapi.PolicyRuleUpdateProtocol(rule.Protocol),
+			Ports:               rule.Ports,
+			PortRanges:          toAPIPortRanges(rule.PortRanges),
+			Sources:             rule.Sources,
+			Destinations:        rule.Destinations,
+			SourceResource:      toAPIResource(rule.SourceResource),
+			DestinationResource: toAPIResource(rule.DestinationResource),
+		}
+	}
+
+	return apiRules
+}
+
+// buildRuleStatesFromAPIResponse converts API response rules to PolicyRuleState slice.
+func buildRuleStatesFromAPIResponse(
+	ctx context.Context,
+	policyID string,
+	apiRules []nbapi.PolicyRule,
+	inputRules []PolicyRuleArgs,
+) []PolicyRuleState {
+	rules := make([]PolicyRuleState, len(apiRules))
+
+	for ruleIndex, rule := range apiRules {
+		apiSourcesStr := formatSliceForDebug(rule.Sources)
+		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] API returned Sources=%s after update", policyID, ruleIndex, apiSourcesStr)
+
+		sources := reconstructGroupsFromAPI(ctx, policyID, ruleIndex, rule.Sources, getInputSources(inputRules, ruleIndex), "Sources")
+		destinations := reconstructGroupsFromAPI(ctx, policyID, ruleIndex, rule.Destinations, getInputDestinations(inputRules, ruleIndex), "Destinations")
+
+		rules[ruleIndex] = PolicyRuleState{
+			ID:                  rule.Id,
+			Name:                rule.Name,
+			Description:         rule.Description,
+			Bidirectional:       rule.Bidirectional,
+			Action:              RuleAction(rule.Action),
+			Enabled:             rule.Enabled,
+			Protocol:            Protocol(rule.Protocol),
+			Ports:               rule.Ports,
+			PortRanges:          fromAPIPortRanges(rule.PortRanges),
+			Sources:             sources,
+			Destinations:        destinations,
+			SourceResource:      fromAPIResource(rule.SourceResource),
+			DestinationResource: fromAPIResource(rule.DestinationResource),
+		}
+	}
+
+	return rules
+}
+
+// reconstructGroupsFromAPI handles the case where API returns nil but we sent groups.
+func reconstructGroupsFromAPI(
+	ctx context.Context,
+	policyID string,
+	ruleIndex int,
+	apiGroups *[]nbapi.GroupMinimum,
+	inputIDs *[]string,
+	fieldName string,
+) *[]RuleGroup {
+	groups := fromAPIGroupMinimums(apiGroups)
+	if groups == nil && inputIDs != nil {
+		reconstructed := make([]RuleGroup, len(*inputIDs))
+		for i, id := range *inputIDs {
+			reconstructed[i] = RuleGroup{ID: id, Name: ""} // Name will be filled on next Read
+		}
+
+		groups = &reconstructed
+
+		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] reconstructed %s from inputs (API returned nil)", policyID, ruleIndex, fieldName)
+	}
+
+	return groups
+}
+
+// getInputSources safely retrieves sources from input rules at the given index.
+func getInputSources(inputRules []PolicyRuleArgs, index int) *[]string {
+	if index < len(inputRules) {
+		return inputRules[index].Sources
+	}
+
+	return nil
+}
+
+// getInputDestinations safely retrieves destinations from input rules at the given index.
+func getInputDestinations(inputRules []PolicyRuleArgs, index int) *[]string {
+	if index < len(inputRules) {
+		return inputRules[index].Destinations
+	}
+
+	return nil
 }

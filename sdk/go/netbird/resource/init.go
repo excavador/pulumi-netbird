@@ -37,6 +37,8 @@ func (m *module) Construct(ctx *pulumi.Context, name, typ, urn string) (r pulumi
 		r = &Policy{}
 	case "netbird:resource:SetupKey":
 		r = &SetupKey{}
+	case "netbird:resource:Token":
+		r = &Token{}
 	case "netbird:resource:User":
 		r = &User{}
 	default:
