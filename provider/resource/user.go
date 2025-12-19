@@ -241,14 +241,14 @@ func (*User) Diff(ctx context.Context, req infer.DiffRequest[UserArgs, UserState
 
 	diff := map[string]p.PropertyDiff{}
 
-	if req.Inputs.Name != req.State.Name {
+	if !equalPtr(req.Inputs.Name, req.State.Name) {
 		diff["name"] = p.PropertyDiff{
 			InputDiff: false,
 			Kind:      p.Update,
 		}
 	}
 
-	if req.Inputs.Email != req.State.Email {
+	if !equalPtr(req.Inputs.Email, req.State.Email) {
 		diff["email"] = p.PropertyDiff{
 			InputDiff: false,
 			Kind:      p.Update,
@@ -269,14 +269,14 @@ func (*User) Diff(ctx context.Context, req infer.DiffRequest[UserArgs, UserState
 		}
 	}
 
-	if equalSlice(req.Inputs.AutoGroups, req.State.AutoGroups) {
+	if !equalSlice(req.Inputs.AutoGroups, req.State.AutoGroups) {
 		diff["auto_groups"] = p.PropertyDiff{
 			InputDiff: false,
 			Kind:      p.Update,
 		}
 	}
 
-	if req.Inputs.IsBlocked != req.State.IsBlocked {
+	if !equalBoolPtr(req.Inputs.IsBlocked, req.State.IsBlocked) {
 		diff["blocked"] = p.PropertyDiff{
 			InputDiff: false,
 			Kind:      p.Update,

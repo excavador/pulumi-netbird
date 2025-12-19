@@ -64,3 +64,12 @@ func equalSlicePtr(sliceA, sliceB *[]string) bool {
 
 	return equalSlice(*sliceA, *sliceB)
 }
+
+// equalBoolPtr compares two *bool values safely.
+// Treats nil as equivalent to false for comparison purposes.
+func equalBoolPtr(a, b *bool) bool {
+	aVal := a != nil && *a
+	bVal := b != nil && *b
+
+	return aVal == bVal
+}

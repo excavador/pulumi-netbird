@@ -4,7 +4,7 @@
 # Execute via: devbox run -- just <command>
 
 # Provider version (update this when releasing)
-PROVIDER_VERSION := "0.2.11"
+PROVIDER_VERSION := "0.2.12"
 
 # Build provider binary
 # Usage: just build-provider
