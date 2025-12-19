@@ -1,6 +1,6 @@
 {
   "resource": true,
   "name": "netbird",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "server": "github://api.github.com/excavador/pulumi-netbird"
 }

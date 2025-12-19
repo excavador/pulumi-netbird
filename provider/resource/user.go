@@ -50,8 +50,8 @@ type UserState struct {
 	Email         *string  `pulumi:"email"`
 	Name          *string  `pulumi:"name"`
 	Role          string   `pulumi:"role"`
-	IsServiceUser bool     `pulumi:"isServiceUser"`
-	AutoGroups    []string `pulumi:"autoGroups"`
+	IsServiceUser bool     `pulumi:"is_service_user"`
+	AutoGroups    []string `pulumi:"auto_groups"`
 	IsBlocked     *bool    `pulumi:"blocked"`
 }
 

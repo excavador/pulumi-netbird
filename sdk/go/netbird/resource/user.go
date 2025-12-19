@@ -17,13 +17,13 @@ type User struct {
 	pulumi.CustomResourceState
 
 	// Groups this user’s peers are automatically assigned to.
-	AutoGroups pulumi.StringArrayOutput `pulumi:"autoGroups"`
+	Auto_groups pulumi.StringArrayOutput `pulumi:"auto_groups"`
 	// Indicates whether the user is blocked from accessing the system
 	Blocked pulumi.BoolOutput `pulumi:"blocked"`
 	// Email address of the user.
 	Email pulumi.StringOutput `pulumi:"email"`
 	// Whether this user is a service identity.
-	IsServiceUser pulumi.BoolOutput `pulumi:"isServiceUser"`
+	Is_service_user pulumi.BoolOutput `pulumi:"is_service_user"`
 	// Full name of the user.
 	Name pulumi.StringOutput `pulumi:"name"`
 	// NetBird account role assigned to the user.
@@ -206,8 +206,8 @@ func (o UserOutput) ToUserOutputWithContext(ctx context.Context) UserOutput {
 }
 
 // Groups this user’s peers are automatically assigned to.
-func (o UserOutput) AutoGroups() pulumi.StringArrayOutput {
-	return o.ApplyT(func(v *User) pulumi.StringArrayOutput { return v.AutoGroups }).(pulumi.StringArrayOutput)
+func (o UserOutput) Auto_groups() pulumi.StringArrayOutput {
+	return o.ApplyT(func(v *User) pulumi.StringArrayOutput { return v.Auto_groups }).(pulumi.StringArrayOutput)
 }
 
 // Indicates whether the user is blocked from accessing the system
@@ -221,8 +221,8 @@ func (o UserOutput) Email() pulumi.StringOutput {
 }
 
 // Whether this user is a service identity.
-func (o UserOutput) IsServiceUser() pulumi.BoolOutput {
-	return o.ApplyT(func(v *User) pulumi.BoolOutput { return v.IsServiceUser }).(pulumi.BoolOutput)
+func (o UserOutput) Is_service_user() pulumi.BoolOutput {
+	return o.ApplyT(func(v *User) pulumi.BoolOutput { return v.Is_service_user }).(pulumi.BoolOutput)
 }
 
 // Full name of the user.
