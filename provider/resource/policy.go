@@ -24,12 +24,15 @@ func (policy *Policy) Annotate(annotator infer.Annotator) {
 }
 
 // PolicyArgs defines the user-supplied arguments for creating/updating a Policy resource.
+// NOTE: NetBird API has a bug where it silently drops all rules except the first one.
+// Therefore, this resource explicitly supports only a single rule per policy.
+// If you need multiple protocols (e.g., TCP and UDP for DNS), create separate policies.
 type PolicyArgs struct {
-	Name                string           `pulumi:"name"`                    // Policy name (required)
-	Description         *string          `pulumi:"description,optional"`    // Optional description
-	Enabled             bool             `pulumi:"enabled"`                 // Whether the policy is enabled
-	Rules               []PolicyRuleArgs `pulumi:"rules"`                   // List of rules defined in the policy
-	SourcePostureChecks *[]string        `pulumi:"posture_checks,optional"` // Optional list of posture check IDs
+	Name                string         `pulumi:"name"`                    // Policy name (required)
+	Description         *string        `pulumi:"description,optional"`    // Optional description
+	Enabled             bool           `pulumi:"enabled"`                 // Whether the policy is enabled
+	Rule                PolicyRuleArgs `pulumi:"rule"`                    // Single rule for the policy (NetBird API limitation)
+	SourcePostureChecks *[]string      `pulumi:"posture_checks,optional"` // Optional list of posture check IDs
 }
 
 // Annotate adds field descriptions to PolicyArgs for generated SDKs.
@@ -37,17 +40,18 @@ func (policy *PolicyArgs) Annotate(annotator infer.Annotator) {
 	annotator.Describe(&policy.Name, "Name Policy name identifier")
 	annotator.Describe(&policy.Description, "Description Policy friendly description, optional")
 	annotator.Describe(&policy.Enabled, "Enabled Policy status")
-	annotator.Describe(&policy.Rules, "Rules Policy rule object for policy UI editor")
+	annotator.Describe(&policy.Rule, "Rule Policy rule definition (single rule per policy due to NetBird API limitation)")
 	annotator.Describe(&policy.SourcePostureChecks, "SourcePostureChecks Posture checks ID's applied to policy source groups, optional")
 }
 
 // PolicyState represents the state of a Policy resource stored in Pulumi state.
+// NOTE: NetBird API only supports a single rule per policy (see PolicyArgs comment).
 type PolicyState struct {
-	Name                string            `pulumi:"name"`
-	Description         *string           `pulumi:"description,optional"`
-	Enabled             bool              `pulumi:"enabled"`
-	Rules               []PolicyRuleState `pulumi:"rules"`
-	SourcePostureChecks *[]string         `pulumi:"posture_checks,optional"`
+	Name                string          `pulumi:"name"`
+	Description         *string         `pulumi:"description,optional"`
+	Enabled             bool            `pulumi:"enabled"`
+	Rule                PolicyRuleState `pulumi:"rule"`
+	SourcePostureChecks *[]string       `pulumi:"posture_checks,optional"`
 }
 
 // Annotate adds descriptive annotations to the PolicyState fields for use in generated SDKs.
@@ -55,7 +59,7 @@ func (policy *PolicyState) Annotate(annotator infer.Annotator) {
 	annotator.Describe(&policy.Name, "Name Policy name identifier")
 	annotator.Describe(&policy.Description, "Description Policy friendly description, optional")
 	annotator.Describe(&policy.Enabled, "Enabled Policy status")
-	annotator.Describe(&policy.Rules, "Rules Policy rule object for policy UI editor")
+	annotator.Describe(&policy.Rule, "Rule Policy rule definition (single rule per policy due to NetBird API limitation)")
 	annotator.Describe(&policy.SourcePostureChecks, "SourcePostureChecks Posture checks ID's applied to policy source groups, optional")
 }
 
@@ -182,20 +186,21 @@ func (Protocol) Values() []infer.EnumValue[Protocol] {
 }
 
 // Create creates a new NetBird policy.
+// NOTE: NetBird API only supports a single rule per policy.
 func (*Policy) Create(ctx context.Context, req infer.CreateRequest[PolicyArgs]) (infer.CreateResponse[PolicyState], error) {
 	p.GetLogger(ctx).Debugf("Create:Policy")
 
+	rule := req.Inputs.Rule
+
 	// Handle dry-run (preview) mode by constructing a preview PolicyState.
 	if req.DryRun {
-		rules := buildPreviewRuleStates(req.Inputs.Rules)
-
 		return infer.CreateResponse[PolicyState]{
 			ID: "preview",
 			Output: PolicyState{
 				Name:                req.Inputs.Name,
 				Description:         req.Inputs.Description,
 				Enabled:             req.Inputs.Enabled,
-				Rules:               rules,
+				Rule:                buildPreviewRuleState(rule),
 				SourcePostureChecks: req.Inputs.SourcePostureChecks,
 			},
 		}, nil
@@ -206,55 +211,63 @@ func (*Policy) Create(ctx context.Context, req infer.CreateRequest[PolicyArgs]) 
 		return infer.CreateResponse[PolicyState]{}, fmt.Errorf("error getting NetBird client: %w", err)
 	}
 
-	// Convert input rules to nbapi.PolicyRuleUpdate
-	apiRules := make([]nbapi.PolicyRuleUpdate, len(req.Inputs.Rules))
-	for i, rule := range req.Inputs.Rules {
-		apiRules[i] = nbapi.PolicyRuleUpdate{
-			Id:                  rule.ID,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              nbapi.PolicyRuleUpdateAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            nbapi.PolicyRuleUpdateProtocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          toAPIPortRanges(rule.PortRanges),
-			Sources:             rule.Sources,
-			Destinations:        rule.Destinations,
-			SourceResource:      toAPIResource(rule.SourceResource),
-			DestinationResource: toAPIResource(rule.DestinationResource),
-		}
+	// Convert single rule to API format (wrapped in slice for API compatibility)
+	apiRule := nbapi.PolicyRuleUpdate{
+		Id:                  rule.ID,
+		Name:                rule.Name,
+		Description:         rule.Description,
+		Bidirectional:       rule.Bidirectional,
+		Action:              nbapi.PolicyRuleUpdateAction(rule.Action),
+		Enabled:             rule.Enabled,
+		Protocol:            nbapi.PolicyRuleUpdateProtocol(rule.Protocol),
+		Ports:               rule.Ports,
+		PortRanges:          toAPIPortRanges(rule.PortRanges),
+		Sources:             rule.Sources,
+		Destinations:        rule.Destinations,
+		SourceResource:      toAPIResource(rule.SourceResource),
+		DestinationResource: toAPIResource(rule.DestinationResource),
 	}
+
+	p.GetLogger(ctx).Debugf("Create:Policy: Name=%s Rule.Name=%s Rule.Protocol=%s", req.Inputs.Name, rule.Name, rule.Protocol)
 
 	created, err := client.Policies.Create(ctx, nbapi.PolicyUpdate{
 		Name:                req.Inputs.Name,
 		Description:         req.Inputs.Description,
 		Enabled:             req.Inputs.Enabled,
-		Rules:               apiRules,
+		Rules:               []nbapi.PolicyRuleUpdate{apiRule},
 		SourcePostureChecks: req.Inputs.SourcePostureChecks,
 	})
 	if err != nil {
 		return infer.CreateResponse[PolicyState]{}, fmt.Errorf("creating policy failed: %w", err)
 	}
 
-	// Convert created rules to PolicyRuleState
-	rules := make([]PolicyRuleState, len(created.Rules))
-	for ruleIndex, rule := range created.Rules {
-		rules[ruleIndex] = PolicyRuleState{
-			ID:                  rule.Id,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              RuleAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            Protocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             groupMinimumsToIDs(rule.Sources),
-			Destinations:        groupMinimumsToIDs(rule.Destinations),
-			SourceResource:      fromAPIResource(rule.SourceResource),
-			DestinationResource: fromAPIResource(rule.DestinationResource),
-		}
+	// Fail-fast: NetBird API must return exactly 1 rule
+	if len(created.Rules) != 1 {
+		return infer.CreateResponse[PolicyState]{}, fmt.Errorf(
+			"NetBird API returned %d rules, expected exactly 1 (policy: %s)",
+			len(created.Rules), req.Inputs.Name,
+		)
+	}
+
+	apiReturnedRule := created.Rules[0]
+	p.GetLogger(ctx).Debugf("Create:Policy: API returned rule ID=%s Name=%s Protocol=%s",
+		*apiReturnedRule.Id, apiReturnedRule.Name, apiReturnedRule.Protocol)
+
+	// Convert API response to PolicyRuleState
+	ruleState := PolicyRuleState{
+		ID:                  apiReturnedRule.Id,
+		Name:                apiReturnedRule.Name,
+		Description:         apiReturnedRule.Description,
+		Bidirectional:       apiReturnedRule.Bidirectional,
+		Action:              RuleAction(apiReturnedRule.Action),
+		Enabled:             apiReturnedRule.Enabled,
+		Protocol:            Protocol(apiReturnedRule.Protocol),
+		Ports:               apiReturnedRule.Ports,
+		PortRanges:          fromAPIPortRanges(apiReturnedRule.PortRanges),
+		Sources:             groupMinimumsToIDs(apiReturnedRule.Sources),
+		Destinations:        groupMinimumsToIDs(apiReturnedRule.Destinations),
+		SourceResource:      fromAPIResource(apiReturnedRule.SourceResource),
+		DestinationResource: fromAPIResource(apiReturnedRule.DestinationResource),
 	}
 
 	return infer.CreateResponse[PolicyState]{
@@ -263,13 +276,14 @@ func (*Policy) Create(ctx context.Context, req infer.CreateRequest[PolicyArgs]) 
 			Name:                created.Name,
 			Description:         created.Description,
 			Enabled:             created.Enabled,
-			Rules:               rules,
+			Rule:                ruleState,
 			SourcePostureChecks: &created.SourcePostureChecks,
 		},
 	}, nil
 }
 
 // Read reads a Policy from NetBird.
+// NOTE: NetBird API only supports a single rule per policy.
 func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, PolicyState]) (infer.ReadResponse[PolicyArgs, PolicyState], error) {
 	p.GetLogger(ctx).Debugf("Read:Policy[%s]", req.ID)
 
@@ -283,52 +297,56 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 		return infer.ReadResponse[PolicyArgs, PolicyState]{}, fmt.Errorf("reading policy failed: %w", err)
 	}
 
-	rules := make([]PolicyRuleState, len(policy.Rules))
-	inputRules := make([]PolicyRuleArgs, len(policy.Rules))
+	// Fail-fast: NetBird API must return exactly 1 rule
+	if len(policy.Rules) != 1 {
+		return infer.ReadResponse[PolicyArgs, PolicyState]{}, fmt.Errorf(
+			"NetBird API returned %d rules, expected exactly 1 (policy: %s)",
+			len(policy.Rules), req.ID,
+		)
+	}
 
-	for ruleIndex, rule := range policy.Rules {
-		// Log what API returns for debugging
-		apiSourcesStr := formatSliceForDebug(rule.Sources)
+	rule := policy.Rules[0]
 
-		p.GetLogger(ctx).Debugf("Read:Policy[%s]:Rules[%d] API returned Sources=%s", req.ID, ruleIndex, apiSourcesStr)
+	// Log what API returns for debugging
+	apiSourcesStr := formatSliceForDebug(rule.Sources)
+	p.GetLogger(ctx).Debugf("Read:Policy[%s] API returned Rule: Name=%s Sources=%s", req.ID, rule.Name, apiSourcesStr)
 
-		// Convert API groups to string IDs (same format as inputs to avoid phantom diffs)
-		sourceIDs := groupMinimumsToIDs(rule.Sources)
-		destIDs := groupMinimumsToIDs(rule.Destinations)
+	// Convert API groups to string IDs (same format as inputs to avoid phantom diffs)
+	sourceIDs := groupMinimumsToIDs(rule.Sources)
+	destIDs := groupMinimumsToIDs(rule.Destinations)
 
-		// Build state (with string IDs - same type as inputs)
-		rules[ruleIndex] = PolicyRuleState{
-			ID:                  rule.Id,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              RuleAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            Protocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             sourceIDs,
-			Destinations:        destIDs,
-			SourceResource:      fromAPIResource(rule.SourceResource),
-			DestinationResource: fromAPIResource(rule.DestinationResource),
-		}
+	// Build state (with string IDs - same type as inputs)
+	ruleState := PolicyRuleState{
+		ID:                  rule.Id,
+		Name:                rule.Name,
+		Description:         rule.Description,
+		Bidirectional:       rule.Bidirectional,
+		Action:              RuleAction(rule.Action),
+		Enabled:             rule.Enabled,
+		Protocol:            Protocol(rule.Protocol),
+		Ports:               rule.Ports,
+		PortRanges:          fromAPIPortRanges(rule.PortRanges),
+		Sources:             sourceIDs,
+		Destinations:        destIDs,
+		SourceResource:      fromAPIResource(rule.SourceResource),
+		DestinationResource: fromAPIResource(rule.DestinationResource),
+	}
 
-		// Build inputs (same as state, without rule ID)
-		inputRules[ruleIndex] = PolicyRuleArgs{
-			ID:                  nil, // Don't include rule ID in inputs
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              RuleAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            Protocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             sourceIDs,
-			Destinations:        destIDs,
-			SourceResource:      fromAPIResource(rule.SourceResource),
-			DestinationResource: fromAPIResource(rule.DestinationResource),
-		}
+	// Build inputs (same as state, without rule ID)
+	inputRule := PolicyRuleArgs{
+		ID:                  nil, // Don't include rule ID in inputs
+		Name:                rule.Name,
+		Description:         rule.Description,
+		Bidirectional:       rule.Bidirectional,
+		Action:              RuleAction(rule.Action),
+		Enabled:             rule.Enabled,
+		Protocol:            Protocol(rule.Protocol),
+		Ports:               rule.Ports,
+		PortRanges:          fromAPIPortRanges(rule.PortRanges),
+		Sources:             sourceIDs,
+		Destinations:        destIDs,
+		SourceResource:      fromAPIResource(rule.SourceResource),
+		DestinationResource: fromAPIResource(rule.DestinationResource),
 	}
 
 	return infer.ReadResponse[PolicyArgs, PolicyState]{
@@ -337,32 +355,33 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 			Name:                policy.Name,
 			Description:         policy.Description,
 			Enabled:             policy.Enabled,
-			Rules:               inputRules,
+			Rule:                inputRule,
 			SourcePostureChecks: &policy.SourcePostureChecks,
 		},
 		State: PolicyState{
 			Name:                policy.Name,
 			Description:         policy.Description,
 			Enabled:             policy.Enabled,
-			Rules:               rules,
+			Rule:                ruleState,
 			SourcePostureChecks: &policy.SourcePostureChecks,
 		},
 	}, nil
 }
 
 // Update updates an existing NetBird policy.
+// NOTE: NetBird API only supports a single rule per policy.
 func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, PolicyState]) (infer.UpdateResponse[PolicyState], error) {
 	p.GetLogger(ctx).Debugf("Update:Policy[%s]", req.ID)
 
-	if req.DryRun {
-		rules := buildPreviewRuleStates(req.Inputs.Rules)
+	rule := req.Inputs.Rule
 
+	if req.DryRun {
 		return infer.UpdateResponse[PolicyState]{
 			Output: PolicyState{
 				Name:                req.Inputs.Name,
 				Description:         req.Inputs.Description,
 				Enabled:             req.Inputs.Enabled,
-				Rules:               rules,
+				Rule:                buildPreviewRuleState(rule),
 				SourcePostureChecks: req.Inputs.SourcePostureChecks,
 			},
 		}, nil
@@ -373,27 +392,39 @@ func (*Policy) Update(ctx context.Context, req infer.UpdateRequest[PolicyArgs, P
 		return infer.UpdateResponse[PolicyState]{}, fmt.Errorf("error getting NetBird client: %w", err)
 	}
 
-	apiRules := buildAPIRulesForUpdate(req.Inputs.Rules, req.State.Rules)
+	// Build API rule, preserving rule ID from state if available
+	apiRule := buildAPIRuleForUpdate(rule, req.State.Rule)
+
+	p.GetLogger(ctx).Debugf("Update:Policy[%s]: Rule.Name=%s Rule.Protocol=%s", req.ID, rule.Name, rule.Protocol)
 
 	updated, err := client.Policies.Update(ctx, req.ID, nbapi.PolicyCreate{
 		Name:                req.Inputs.Name,
 		Description:         req.Inputs.Description,
 		Enabled:             req.Inputs.Enabled,
-		Rules:               apiRules,
+		Rules:               []nbapi.PolicyRuleUpdate{apiRule},
 		SourcePostureChecks: req.Inputs.SourcePostureChecks,
 	})
 	if err != nil {
 		return infer.UpdateResponse[PolicyState]{}, fmt.Errorf("updating policy failed: %w", err)
 	}
 
-	rules := buildRuleStatesFromAPIResponse(ctx, req.ID, updated.Rules, req.Inputs.Rules)
+	// Fail-fast: NetBird API must return exactly 1 rule
+	if len(updated.Rules) != 1 {
+		return infer.UpdateResponse[PolicyState]{}, fmt.Errorf(
+			"NetBird API returned %d rules, expected exactly 1 (policy: %s)",
+			len(updated.Rules), req.ID,
+		)
+	}
+
+	apiReturnedRule := updated.Rules[0]
+	ruleState := buildRuleStateFromAPIResponse(ctx, req.ID, apiReturnedRule, rule)
 
 	return infer.UpdateResponse[PolicyState]{
 		Output: PolicyState{
 			Name:                updated.Name,
 			Description:         updated.Description,
 			Enabled:             updated.Enabled,
-			Rules:               rules,
+			Rule:                ruleState,
 			SourcePostureChecks: &updated.SourcePostureChecks,
 		},
 	}, nil
@@ -442,75 +473,59 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 			Kind:      p.Update,
 		}
 	}
-	// Rules Diff
-	if len(req.Inputs.Rules) != len(req.State.Rules) {
-		diff["rules"] = p.PropertyDiff{
+	// Rule Diff (single rule)
+	input := req.Inputs.Rule
+	state := req.State.Rule
+
+	p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rule input=%+v state=%+v", req.ID, input, state)
+
+	// Log actual values being compared for debugging
+	inputSourcesStr := formatStringSliceForDebug(input.Sources)
+	stateSourcesStr := formatStringSliceForDebug(state.Sources)
+
+	p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rule Sources - input=%s state=%s equal=%v",
+		req.ID, inputSourcesStr, stateSourcesStr, equalSlicePtr(input.Sources, state.Sources))
+
+	inputDestsStr := formatStringSliceForDebug(input.Destinations)
+	stateDestsStr := formatStringSliceForDebug(state.Destinations)
+
+	p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rule Destinations - input=%s state=%s equal=%v",
+		req.ID, inputDestsStr, stateDestsStr, equalSlicePtr(input.Destinations, state.Destinations))
+
+	// Compare all fields except rule ID (which is API-managed and not part of user inputs)
+	// Note: input.ID may be nil (from Read) or set (from user), but we ignore it in comparison
+	// Sources and Destinations are now both *[]string, so direct comparison works
+	if input.Name != state.Name ||
+		!equalPtr(input.Description, state.Description) ||
+		input.Bidirectional != state.Bidirectional ||
+		input.Action != state.Action ||
+		input.Enabled != state.Enabled ||
+		input.Protocol != state.Protocol ||
+		!equalSlicePtr(input.Ports, state.Ports) ||
+		!equalPortRangePtr(input.PortRanges, state.PortRanges) ||
+		!equalSlicePtr(input.Sources, state.Sources) ||
+		!equalSlicePtr(input.Destinations, state.Destinations) ||
+		!equalResourcePtr(input.SourceResource, state.SourceResource) ||
+		!equalResourcePtr(input.DestinationResource, state.DestinationResource) {
+
+		p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rule differs - Name:%v Desc:%v Bidir:%v Action:%v Enabled:%v Protocol:%v Ports:%v PortRanges:%v Sources:%v Destinations:%v SrcRes:%v DstRes:%v",
+			req.ID,
+			input.Name != state.Name,
+			!equalPtr(input.Description, state.Description),
+			input.Bidirectional != state.Bidirectional,
+			input.Action != state.Action,
+			input.Enabled != state.Enabled,
+			input.Protocol != state.Protocol,
+			!equalSlicePtr(input.Ports, state.Ports),
+			!equalPortRangePtr(input.PortRanges, state.PortRanges),
+			!equalSlicePtr(input.Sources, state.Sources),
+			!equalSlicePtr(input.Destinations, state.Destinations),
+			!equalResourcePtr(input.SourceResource, state.SourceResource),
+			!equalResourcePtr(input.DestinationResource, state.DestinationResource))
+
+		diff["rule"] = p.PropertyDiff{
 			InputDiff: false,
 			Kind:      p.Update,
-		}
-	} else {
-		equal := true
-
-		for ruleIndex := range req.Inputs.Rules {
-			input := req.Inputs.Rules[ruleIndex]
-			state := req.State.Rules[ruleIndex]
-
-			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] input=%+v state=%+v", req.ID, ruleIndex, input, state)
-
-			// Log actual values being compared for debugging
-			inputSourcesStr := formatStringSliceForDebug(input.Sources)
-			stateSourcesStr := formatStringSliceForDebug(state.Sources)
-
-			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Sources - input=%s state=%s equal=%v",
-				req.ID, ruleIndex, inputSourcesStr, stateSourcesStr, equalSlicePtr(input.Sources, state.Sources))
-
-			inputDestsStr := formatStringSliceForDebug(input.Destinations)
-			stateDestsStr := formatStringSliceForDebug(state.Destinations)
-
-			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Destinations - input=%s state=%s equal=%v",
-				req.ID, ruleIndex, inputDestsStr, stateDestsStr, equalSlicePtr(input.Destinations, state.Destinations))
-
-			// Compare all fields except rule ID (which is API-managed and not part of user inputs)
-			// Note: input.ID may be nil (from Read) or set (from user), but we ignore it in comparison
-			// Sources and Destinations are now both *[]string, so direct comparison works
-			if input.Name != state.Name ||
-				!equalPtr(input.Description, state.Description) ||
-				input.Bidirectional != state.Bidirectional ||
-				input.Action != state.Action ||
-				input.Enabled != state.Enabled ||
-				input.Protocol != state.Protocol ||
-				!equalSlicePtr(input.Ports, state.Ports) ||
-				!equalPortRangePtr(input.PortRanges, state.PortRanges) ||
-				!equalSlicePtr(input.Sources, state.Sources) ||
-				!equalSlicePtr(input.Destinations, state.Destinations) ||
-				!equalResourcePtr(input.SourceResource, state.SourceResource) ||
-				!equalResourcePtr(input.DestinationResource, state.DestinationResource) {
-				equal = false
-
-				p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] differs - Name:%v Desc:%v Bidir:%v Action:%v Enabled:%v Protocol:%v Ports:%v PortRanges:%v Sources:%v Destinations:%v SrcRes:%v DstRes:%v",
-					req.ID, ruleIndex,
-					input.Name != state.Name,
-					!equalPtr(input.Description, state.Description),
-					input.Bidirectional != state.Bidirectional,
-					input.Action != state.Action,
-					input.Enabled != state.Enabled,
-					input.Protocol != state.Protocol,
-					!equalSlicePtr(input.Ports, state.Ports),
-					!equalPortRangePtr(input.PortRanges, state.PortRanges),
-					!equalSlicePtr(input.Sources, state.Sources),
-					!equalSlicePtr(input.Destinations, state.Destinations),
-					!equalResourcePtr(input.SourceResource, state.SourceResource),
-					!equalResourcePtr(input.DestinationResource, state.DestinationResource))
-
-				break
-			}
-		}
-
-		if !equal {
-			diff["rules"] = p.PropertyDiff{
-				InputDiff: false,
-				Kind:      p.Update,
-			}
 		}
 	}
 
@@ -546,7 +561,7 @@ func (*Policy) WireDependencies(f infer.FieldSelector, args *PolicyArgs, state *
 	f.OutputField(&state.Name).DependsOn(f.InputField(&args.Name))
 	f.OutputField(&state.Description).DependsOn(f.InputField(&args.Description))
 	f.OutputField(&state.Enabled).DependsOn(f.InputField(&args.Enabled))
-	f.OutputField(&state.Rules).DependsOn(f.InputField(&args.Rules))
+	f.OutputField(&state.Rule).DependsOn(f.InputField(&args.Rule))
 	f.OutputField(&state.SourcePostureChecks).DependsOn(f.InputField(&args.SourcePostureChecks))
 }
 
@@ -632,105 +647,86 @@ func formatStringSliceForDebug(slice *[]string) string {
 	return fmt.Sprintf("%v", *slice)
 }
 
-// buildPreviewRuleStates constructs PolicyRuleState slice for dry-run/preview mode.
-func buildPreviewRuleStates(inputRules []PolicyRuleArgs) []PolicyRuleState {
-	rules := make([]PolicyRuleState, len(inputRules))
-
-	for ruleIndex, rule := range inputRules {
-		// For preview, just copy the string IDs directly (state uses same type as inputs)
-		rules[ruleIndex] = PolicyRuleState{
-			ID:                  rule.ID,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              rule.Action,
-			Enabled:             rule.Enabled,
-			Protocol:            rule.Protocol,
-			Ports:               rule.Ports,
-			PortRanges:          rule.PortRanges,
-			Sources:             rule.Sources,      // Same type, direct copy
-			Destinations:        rule.Destinations, // Same type, direct copy
-			SourceResource:      rule.SourceResource,
-			DestinationResource: rule.DestinationResource,
-		}
+// buildPreviewRuleState constructs PolicyRuleState for dry-run/preview mode.
+func buildPreviewRuleState(rule PolicyRuleArgs) PolicyRuleState {
+	// For preview, just copy the string IDs directly (state uses same type as inputs)
+	return PolicyRuleState{
+		ID:                  rule.ID,
+		Name:                rule.Name,
+		Description:         rule.Description,
+		Bidirectional:       rule.Bidirectional,
+		Action:              rule.Action,
+		Enabled:             rule.Enabled,
+		Protocol:            rule.Protocol,
+		Ports:               rule.Ports,
+		PortRanges:          rule.PortRanges,
+		Sources:             rule.Sources,      // Same type, direct copy
+		Destinations:        rule.Destinations, // Same type, direct copy
+		SourceResource:      rule.SourceResource,
+		DestinationResource: rule.DestinationResource,
 	}
-
-	return rules
 }
 
-// buildAPIRulesForUpdate converts input rules to API format for update.
-func buildAPIRulesForUpdate(inputRules []PolicyRuleArgs, stateRules []PolicyRuleState) []nbapi.PolicyRuleUpdate {
-	apiRules := make([]nbapi.PolicyRuleUpdate, len(inputRules))
-
-	for ruleIndex, rule := range inputRules {
-		ruleID := rule.ID
-		// If rule ID not in inputs, try to get it from state (for existing rules)
-		if ruleID == nil && ruleIndex < len(stateRules) {
-			ruleID = stateRules[ruleIndex].ID
-		}
-
-		apiRules[ruleIndex] = nbapi.PolicyRuleUpdate{
-			Id:                  ruleID,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              nbapi.PolicyRuleUpdateAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            nbapi.PolicyRuleUpdateProtocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          toAPIPortRanges(rule.PortRanges),
-			Sources:             rule.Sources,
-			Destinations:        rule.Destinations,
-			SourceResource:      toAPIResource(rule.SourceResource),
-			DestinationResource: toAPIResource(rule.DestinationResource),
-		}
+// buildAPIRuleForUpdate converts input rule to API format for update.
+func buildAPIRuleForUpdate(inputRule PolicyRuleArgs, stateRule PolicyRuleState) nbapi.PolicyRuleUpdate {
+	ruleID := inputRule.ID
+	// If rule ID not in inputs, try to get it from state (for existing rule)
+	if ruleID == nil {
+		ruleID = stateRule.ID
 	}
 
-	return apiRules
+	return nbapi.PolicyRuleUpdate{
+		Id:                  ruleID,
+		Name:                inputRule.Name,
+		Description:         inputRule.Description,
+		Bidirectional:       inputRule.Bidirectional,
+		Action:              nbapi.PolicyRuleUpdateAction(inputRule.Action),
+		Enabled:             inputRule.Enabled,
+		Protocol:            nbapi.PolicyRuleUpdateProtocol(inputRule.Protocol),
+		Ports:               inputRule.Ports,
+		PortRanges:          toAPIPortRanges(inputRule.PortRanges),
+		Sources:             inputRule.Sources,
+		Destinations:        inputRule.Destinations,
+		SourceResource:      toAPIResource(inputRule.SourceResource),
+		DestinationResource: toAPIResource(inputRule.DestinationResource),
+	}
 }
 
-// buildRuleStatesFromAPIResponse converts API response rules to PolicyRuleState slice.
-func buildRuleStatesFromAPIResponse(
+// buildRuleStateFromAPIResponse converts API response rule to PolicyRuleState.
+func buildRuleStateFromAPIResponse(
 	ctx context.Context,
 	policyID string,
-	apiRules []nbapi.PolicyRule,
-	inputRules []PolicyRuleArgs,
-) []PolicyRuleState {
-	rules := make([]PolicyRuleState, len(apiRules))
+	apiRule nbapi.PolicyRule,
+	inputRule PolicyRuleArgs,
+) PolicyRuleState {
+	apiSourcesStr := formatSliceForDebug(apiRule.Sources)
+	p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rule API returned Sources=%s after update", policyID, apiSourcesStr)
 
-	for ruleIndex, rule := range apiRules {
-		apiSourcesStr := formatSliceForDebug(rule.Sources)
-		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] API returned Sources=%s after update", policyID, ruleIndex, apiSourcesStr)
+	sources := reconstructIDsFromAPISingle(ctx, policyID, apiRule.Sources, inputRule.Sources, "Sources")
+	destinations := reconstructIDsFromAPISingle(ctx, policyID, apiRule.Destinations, inputRule.Destinations, "Destinations")
 
-		sources := reconstructIDsFromAPI(ctx, policyID, ruleIndex, rule.Sources, getInputSources(inputRules, ruleIndex), "Sources")
-		destinations := reconstructIDsFromAPI(ctx, policyID, ruleIndex, rule.Destinations, getInputDestinations(inputRules, ruleIndex), "Destinations")
-
-		rules[ruleIndex] = PolicyRuleState{
-			ID:                  rule.Id,
-			Name:                rule.Name,
-			Description:         rule.Description,
-			Bidirectional:       rule.Bidirectional,
-			Action:              RuleAction(rule.Action),
-			Enabled:             rule.Enabled,
-			Protocol:            Protocol(rule.Protocol),
-			Ports:               rule.Ports,
-			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             sources,
-			Destinations:        destinations,
-			SourceResource:      fromAPIResource(rule.SourceResource),
-			DestinationResource: fromAPIResource(rule.DestinationResource),
-		}
+	return PolicyRuleState{
+		ID:                  apiRule.Id,
+		Name:                apiRule.Name,
+		Description:         apiRule.Description,
+		Bidirectional:       apiRule.Bidirectional,
+		Action:              RuleAction(apiRule.Action),
+		Enabled:             apiRule.Enabled,
+		Protocol:            Protocol(apiRule.Protocol),
+		Ports:               apiRule.Ports,
+		PortRanges:          fromAPIPortRanges(apiRule.PortRanges),
+		Sources:             sources,
+		Destinations:        destinations,
+		SourceResource:      fromAPIResource(apiRule.SourceResource),
+		DestinationResource: fromAPIResource(apiRule.DestinationResource),
 	}
-
-	return rules
 }
 
-// reconstructIDsFromAPI handles the case where API returns nil but we sent groups.
+// reconstructIDsFromAPISingle handles the case where API returns nil but we sent groups.
 // Returns string IDs (same as inputs).
-func reconstructIDsFromAPI(
+func reconstructIDsFromAPISingle(
 	ctx context.Context,
 	policyID string,
-	ruleIndex int,
 	apiGroups *[]nbapi.GroupMinimum,
 	inputIDs *[]string,
 	fieldName string,
@@ -742,26 +738,8 @@ func reconstructIDsFromAPI(
 		copy(idsCopy, *inputIDs)
 		ids = &idsCopy
 
-		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] reconstructed %s from inputs (API returned nil)", policyID, ruleIndex, fieldName)
+		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rule reconstructed %s from inputs (API returned nil)", policyID, fieldName)
 	}
 
 	return ids
-}
-
-// getInputSources safely retrieves sources from input rules at the given index.
-func getInputSources(inputRules []PolicyRuleArgs, index int) *[]string {
-	if index < len(inputRules) {
-		return inputRules[index].Sources
-	}
-
-	return nil
-}
-
-// getInputDestinations safely retrieves destinations from input rules at the given index.
-func getInputDestinations(inputRules []PolicyRuleArgs, index int) *[]string {
-	if index < len(inputRules) {
-		return inputRules[index].Destinations
-	}
-
-	return nil
 }

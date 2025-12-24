@@ -24,8 +24,8 @@ type Policy struct {
 	Name pulumi.StringOutput `pulumi:"name"`
 	// SourcePostureChecks Posture checks ID's applied to policy source groups, optional
 	Posture_checks pulumi.StringArrayOutput `pulumi:"posture_checks"`
-	// Rules Policy rule object for policy UI editor
-	Rules PolicyRuleStateArrayOutput `pulumi:"rules"`
+	// Rule Policy rule definition (single rule per policy due to NetBird API limitation)
+	Rule PolicyRuleStateOutput `pulumi:"rule"`
 }
 
 // NewPolicy registers a new resource with the given unique name, arguments, and options.
@@ -41,8 +41,8 @@ func NewPolicy(ctx *pulumi.Context,
 	if args.Name == nil {
 		return nil, errors.New("invalid value for required argument 'Name'")
 	}
-	if args.Rules == nil {
-		return nil, errors.New("invalid value for required argument 'Rules'")
+	if args.Rule == nil {
+		return nil, errors.New("invalid value for required argument 'Rule'")
 	}
 	opts = internal.PkgResourceDefaultOpts(opts)
 	var resource Policy
@@ -85,8 +85,8 @@ type policyArgs struct {
 	Name string `pulumi:"name"`
 	// SourcePostureChecks Posture checks ID's applied to policy source groups, optional
 	Posture_checks []string `pulumi:"posture_checks"`
-	// Rules Policy rule object for policy UI editor
-	Rules []PolicyRuleArgs `pulumi:"rules"`
+	// Rule Policy rule definition (single rule per policy due to NetBird API limitation)
+	Rule PolicyRuleArgs `pulumi:"rule"`
 }
 
 // The set of arguments for constructing a Policy resource.
@@ -99,8 +99,8 @@ type PolicyArgs struct {
 	Name pulumi.StringInput
 	// SourcePostureChecks Posture checks ID's applied to policy source groups, optional
 	Posture_checks pulumi.StringArrayInput
-	// Rules Policy rule object for policy UI editor
-	Rules PolicyRuleArgsArrayInput
+	// Rule Policy rule definition (single rule per policy due to NetBird API limitation)
+	Rule PolicyRuleArgsInput
 }
 
 func (PolicyArgs) ElementType() reflect.Type {
@@ -210,9 +210,9 @@ func (o PolicyOutput) Posture_checks() pulumi.StringArrayOutput {
 	return o.ApplyT(func(v *Policy) pulumi.StringArrayOutput { return v.Posture_checks }).(pulumi.StringArrayOutput)
 }
 
-// Rules Policy rule object for policy UI editor
-func (o PolicyOutput) Rules() PolicyRuleStateArrayOutput {
-	return o.ApplyT(func(v *Policy) PolicyRuleStateArrayOutput { return v.Rules }).(PolicyRuleStateArrayOutput)
+// Rule Policy rule definition (single rule per policy due to NetBird API limitation)
+func (o PolicyOutput) Rule() PolicyRuleStateOutput {
+	return o.ApplyT(func(v *Policy) PolicyRuleStateOutput { return v.Rule }).(PolicyRuleStateOutput)
 }
 
 type PolicyArrayOutput struct{ *pulumi.OutputState }

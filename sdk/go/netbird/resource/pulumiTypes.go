@@ -209,31 +209,6 @@ func (i PolicyRuleArgsArgs) ToPolicyRuleArgsOutputWithContext(ctx context.Contex
 	return pulumi.ToOutputWithContext(ctx, i).(PolicyRuleArgsOutput)
 }
 
-// PolicyRuleArgsArrayInput is an input type that accepts PolicyRuleArgsArray and PolicyRuleArgsArrayOutput values.
-// You can construct a concrete instance of `PolicyRuleArgsArrayInput` via:
-//
-//	PolicyRuleArgsArray{ PolicyRuleArgsArgs{...} }
-type PolicyRuleArgsArrayInput interface {
-	pulumi.Input
-
-	ToPolicyRuleArgsArrayOutput() PolicyRuleArgsArrayOutput
-	ToPolicyRuleArgsArrayOutputWithContext(context.Context) PolicyRuleArgsArrayOutput
-}
-
-type PolicyRuleArgsArray []PolicyRuleArgsInput
-
-func (PolicyRuleArgsArray) ElementType() reflect.Type {
-	return reflect.TypeOf((*[]PolicyRuleArgs)(nil)).Elem()
-}
-
-func (i PolicyRuleArgsArray) ToPolicyRuleArgsArrayOutput() PolicyRuleArgsArrayOutput {
-	return i.ToPolicyRuleArgsArrayOutputWithContext(context.Background())
-}
-
-func (i PolicyRuleArgsArray) ToPolicyRuleArgsArrayOutputWithContext(ctx context.Context) PolicyRuleArgsArrayOutput {
-	return pulumi.ToOutputWithContext(ctx, i).(PolicyRuleArgsArrayOutput)
-}
-
 type PolicyRuleArgsOutput struct{ *pulumi.OutputState }
 
 func (PolicyRuleArgsOutput) ElementType() reflect.Type {
@@ -311,26 +286,6 @@ func (o PolicyRuleArgsOutput) SourceResource() ResourcePtrOutput {
 // Sources Policy rule source group IDs
 func (o PolicyRuleArgsOutput) Sources() pulumi.StringArrayOutput {
 	return o.ApplyT(func(v PolicyRuleArgs) []string { return v.Sources }).(pulumi.StringArrayOutput)
-}
-
-type PolicyRuleArgsArrayOutput struct{ *pulumi.OutputState }
-
-func (PolicyRuleArgsArrayOutput) ElementType() reflect.Type {
-	return reflect.TypeOf((*[]PolicyRuleArgs)(nil)).Elem()
-}
-
-func (o PolicyRuleArgsArrayOutput) ToPolicyRuleArgsArrayOutput() PolicyRuleArgsArrayOutput {
-	return o
-}
-
-func (o PolicyRuleArgsArrayOutput) ToPolicyRuleArgsArrayOutputWithContext(ctx context.Context) PolicyRuleArgsArrayOutput {
-	return o
-}
-
-func (o PolicyRuleArgsArrayOutput) Index(i pulumi.IntInput) PolicyRuleArgsOutput {
-	return pulumi.All(o, i).ApplyT(func(vs []interface{}) PolicyRuleArgs {
-		return vs[0].([]PolicyRuleArgs)[vs[1].(int)]
-	}).(PolicyRuleArgsOutput)
 }
 
 type PolicyRuleState struct {
@@ -439,26 +394,6 @@ func (o PolicyRuleStateOutput) SourceResource() ResourcePtrOutput {
 // Sources Policy rule source group IDs
 func (o PolicyRuleStateOutput) Sources() pulumi.StringArrayOutput {
 	return o.ApplyT(func(v PolicyRuleState) []string { return v.Sources }).(pulumi.StringArrayOutput)
-}
-
-type PolicyRuleStateArrayOutput struct{ *pulumi.OutputState }
-
-func (PolicyRuleStateArrayOutput) ElementType() reflect.Type {
-	return reflect.TypeOf((*[]PolicyRuleState)(nil)).Elem()
-}
-
-func (o PolicyRuleStateArrayOutput) ToPolicyRuleStateArrayOutput() PolicyRuleStateArrayOutput {
-	return o
-}
-
-func (o PolicyRuleStateArrayOutput) ToPolicyRuleStateArrayOutputWithContext(ctx context.Context) PolicyRuleStateArrayOutput {
-	return o
-}
-
-func (o PolicyRuleStateArrayOutput) Index(i pulumi.IntInput) PolicyRuleStateOutput {
-	return pulumi.All(o, i).ApplyT(func(vs []interface{}) PolicyRuleState {
-		return vs[0].([]PolicyRuleState)[vs[1].(int)]
-	}).(PolicyRuleStateOutput)
 }
 
 type Resource struct {
@@ -727,7 +662,6 @@ func init() {
 	pulumi.RegisterInputType(reflect.TypeOf((*NameserverInput)(nil)).Elem(), NameserverArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*NameserverArrayInput)(nil)).Elem(), NameserverArray{})
 	pulumi.RegisterInputType(reflect.TypeOf((*PolicyRuleArgsInput)(nil)).Elem(), PolicyRuleArgsArgs{})
-	pulumi.RegisterInputType(reflect.TypeOf((*PolicyRuleArgsArrayInput)(nil)).Elem(), PolicyRuleArgsArray{})
 	pulumi.RegisterInputType(reflect.TypeOf((*ResourceInput)(nil)).Elem(), ResourceArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*ResourcePtrInput)(nil)).Elem(), ResourceArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*RulePortRangeInput)(nil)).Elem(), RulePortRangeArgs{})
@@ -735,9 +669,7 @@ func init() {
 	pulumi.RegisterOutputType(NameserverOutput{})
 	pulumi.RegisterOutputType(NameserverArrayOutput{})
 	pulumi.RegisterOutputType(PolicyRuleArgsOutput{})
-	pulumi.RegisterOutputType(PolicyRuleArgsArrayOutput{})
 	pulumi.RegisterOutputType(PolicyRuleStateOutput{})
-	pulumi.RegisterOutputType(PolicyRuleStateArrayOutput{})
 	pulumi.RegisterOutputType(ResourceOutput{})
 	pulumi.RegisterOutputType(ResourcePtrOutput{})
 	pulumi.RegisterOutputType(RulePortRangeOutput{})
