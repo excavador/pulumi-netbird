@@ -94,6 +94,8 @@ func (policy *PolicyRuleArgs) Annotate(annotator infer.Annotator) {
 }
 
 // PolicyRuleState represents the state of an individual rule within a policy.
+// Note: Sources and Destinations are stored as string IDs (matching PolicyRuleArgs)
+// to prevent phantom diffs when Pulumi compares state vs inputs.
 type PolicyRuleState struct {
 	ID                  *string          `pulumi:"id,optional"`
 	Name                string           `pulumi:"name"`
@@ -104,8 +106,8 @@ type PolicyRuleState struct {
 	Protocol            Protocol         `pulumi:"protocol"`
 	Ports               *[]string        `pulumi:"ports,optional"`
 	PortRanges          *[]RulePortRange `pulumi:"portRanges,optional"`
-	Sources             *[]RuleGroup     `pulumi:"sources,optional"` // Fully-resolved group info (not just IDs)
-	Destinations        *[]RuleGroup     `pulumi:"destinations,optional"`
+	Sources             *[]string        `pulumi:"sources,optional"`      // Group IDs (same type as inputs)
+	Destinations        *[]string        `pulumi:"destinations,optional"` // Group IDs (same type as inputs)
 	SourceResource      *Resource        `pulumi:"sourceResource,optional"`
 	DestinationResource *Resource        `pulumi:"destinationResource,optional"`
 }
@@ -137,18 +139,6 @@ type RulePortRange struct {
 func (r *RulePortRange) Annotate(a infer.Annotator) {
 	a.Describe(&r.Start, "Start of port range")
 	a.Describe(&r.End, "End of port range")
-}
-
-// RuleGroup type.
-type RuleGroup struct {
-	ID   string `pulumi:"id"`
-	Name string `pulumi:"name"`
-}
-
-// Annotate adds descriptive annotations to the RuleGroup fields for use in generated SDKs.
-func (g *RuleGroup) Annotate(a infer.Annotator) {
-	a.Describe(&g.ID, "The unique identifier of the group.")
-	a.Describe(&g.Name, "The name of the group.")
 }
 
 // RuleAction defines the allowed actions for a rule (accept/drop).
@@ -197,47 +187,7 @@ func (*Policy) Create(ctx context.Context, req infer.CreateRequest[PolicyArgs]) 
 
 	// Handle dry-run (preview) mode by constructing a preview PolicyState.
 	if req.DryRun {
-		// Convert PolicyRuleArgs to PolicyRuleState for preview
-		rules := make([]PolicyRuleState, len(req.Inputs.Rules))
-
-		for ruleIndex, rule := range req.Inputs.Rules {
-			// Construct sources and destination groups
-			var sources, destinations *[]RuleGroup
-
-			if rule.Sources != nil {
-				groups := make([]RuleGroup, len(*rule.Sources))
-				for j, g := range *rule.Sources {
-					groups[j] = RuleGroup{Name: "preview", ID: g}
-				}
-				// Assign the address of the groups slice to sources
-				sources = &groups
-			}
-
-			if rule.Destinations != nil {
-				groups := make([]RuleGroup, len(*rule.Destinations))
-				for j, g := range *rule.Destinations {
-					groups[j] = RuleGroup{Name: "preview", ID: g}
-				}
-				// Assign the address of the groups slice to destinations
-				destinations = &groups
-			}
-
-			rules[ruleIndex] = PolicyRuleState{
-				ID:                  rule.ID,
-				Name:                rule.Name,
-				Description:         rule.Description,
-				Bidirectional:       rule.Bidirectional,
-				Action:              rule.Action,
-				Enabled:             rule.Enabled,
-				Protocol:            rule.Protocol,
-				Ports:               rule.Ports,
-				PortRanges:          rule.PortRanges,
-				Sources:             sources,
-				Destinations:        destinations,
-				SourceResource:      rule.SourceResource,
-				DestinationResource: rule.DestinationResource,
-			}
-		}
+		rules := buildPreviewRuleStates(req.Inputs.Rules)
 
 		return infer.CreateResponse[PolicyState]{
 			ID: "preview",
@@ -300,8 +250,8 @@ func (*Policy) Create(ctx context.Context, req infer.CreateRequest[PolicyArgs]) 
 			Protocol:            Protocol(rule.Protocol),
 			Ports:               rule.Ports,
 			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             fromAPIGroupMinimums(rule.Sources),
-			Destinations:        fromAPIGroupMinimums(rule.Destinations),
+			Sources:             groupMinimumsToIDs(rule.Sources),
+			Destinations:        groupMinimumsToIDs(rule.Destinations),
 			SourceResource:      fromAPIResource(rule.SourceResource),
 			DestinationResource: fromAPIResource(rule.DestinationResource),
 		}
@@ -342,34 +292,11 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 
 		p.GetLogger(ctx).Debugf("Read:Policy[%s]:Rules[%d] API returned Sources=%s", req.ID, ruleIndex, apiSourcesStr)
 
-		// Convert API groups to RuleGroup objects for state
-		sources := fromAPIGroupMinimums(rule.Sources)
-		destinations := fromAPIGroupMinimums(rule.Destinations)
+		// Convert API groups to string IDs (same format as inputs to avoid phantom diffs)
+		sourceIDs := groupMinimumsToIDs(rule.Sources)
+		destIDs := groupMinimumsToIDs(rule.Destinations)
 
-		// Convert RuleGroup objects to string IDs for inputs
-		var sourceIDs *[]string
-
-		if sources != nil {
-			ids := make([]string, len(*sources))
-			for i, g := range *sources {
-				ids[i] = g.ID
-			}
-
-			sourceIDs = &ids
-		}
-
-		var destIDs *[]string
-
-		if destinations != nil {
-			ids := make([]string, len(*destinations))
-			for i, g := range *destinations {
-				ids[i] = g.ID
-			}
-
-			destIDs = &ids
-		}
-
-		// Build state (with RuleGroup objects)
+		// Build state (with string IDs - same type as inputs)
 		rules[ruleIndex] = PolicyRuleState{
 			ID:                  rule.Id,
 			Name:                rule.Name,
@@ -380,13 +307,13 @@ func (*Policy) Read(ctx context.Context, req infer.ReadRequest[PolicyArgs, Polic
 			Protocol:            Protocol(rule.Protocol),
 			Ports:               rule.Ports,
 			PortRanges:          fromAPIPortRanges(rule.PortRanges),
-			Sources:             sources,
-			Destinations:        destinations,
+			Sources:             sourceIDs,
+			Destinations:        destIDs,
 			SourceResource:      fromAPIResource(rule.SourceResource),
 			DestinationResource: fromAPIResource(rule.DestinationResource),
 		}
 
-		// Build inputs (with string IDs, no rule ID)
+		// Build inputs (same as state, without rule ID)
 		inputRules[ruleIndex] = PolicyRuleArgs{
 			ID:                  nil, // Don't include rule ID in inputs
 			Name:                rule.Name,
@@ -530,25 +457,22 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 
 			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] input=%+v state=%+v", req.ID, ruleIndex, input, state)
 
-			// Convert state RuleGroups to string IDs for comparison (cache to avoid multiple calls)
-			stateSourceIDs := toGroupIDs(state.Sources)
-			stateDestIDs := toGroupIDs(state.Destinations)
-
 			// Log actual values being compared for debugging
 			inputSourcesStr := formatStringSliceForDebug(input.Sources)
-			stateSourcesStr := formatStringSliceForDebug(stateSourceIDs)
+			stateSourcesStr := formatStringSliceForDebug(state.Sources)
 
-			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Sources - input=%s stateConverted=%s equal=%v",
-				req.ID, ruleIndex, inputSourcesStr, stateSourcesStr, equalSlicePtr(input.Sources, stateSourceIDs))
+			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Sources - input=%s state=%s equal=%v",
+				req.ID, ruleIndex, inputSourcesStr, stateSourcesStr, equalSlicePtr(input.Sources, state.Sources))
 
 			inputDestsStr := formatStringSliceForDebug(input.Destinations)
-			stateDestsStr := formatStringSliceForDebug(stateDestIDs)
+			stateDestsStr := formatStringSliceForDebug(state.Destinations)
 
-			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Destinations - input=%s stateConverted=%s equal=%v",
-				req.ID, ruleIndex, inputDestsStr, stateDestsStr, equalSlicePtr(input.Destinations, stateDestIDs))
+			p.GetLogger(ctx).Debugf("Diff:Policy[%s]:Rules[%d] Destinations - input=%s state=%s equal=%v",
+				req.ID, ruleIndex, inputDestsStr, stateDestsStr, equalSlicePtr(input.Destinations, state.Destinations))
 
 			// Compare all fields except rule ID (which is API-managed and not part of user inputs)
 			// Note: input.ID may be nil (from Read) or set (from user), but we ignore it in comparison
+			// Sources and Destinations are now both *[]string, so direct comparison works
 			if input.Name != state.Name ||
 				!equalPtr(input.Description, state.Description) ||
 				input.Bidirectional != state.Bidirectional ||
@@ -557,8 +481,8 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 				input.Protocol != state.Protocol ||
 				!equalSlicePtr(input.Ports, state.Ports) ||
 				!equalPortRangePtr(input.PortRanges, state.PortRanges) ||
-				!equalSlicePtr(input.Sources, stateSourceIDs) ||
-				!equalSlicePtr(input.Destinations, stateDestIDs) ||
+				!equalSlicePtr(input.Sources, state.Sources) ||
+				!equalSlicePtr(input.Destinations, state.Destinations) ||
 				!equalResourcePtr(input.SourceResource, state.SourceResource) ||
 				!equalResourcePtr(input.DestinationResource, state.DestinationResource) {
 				equal = false
@@ -573,8 +497,8 @@ func (*Policy) Diff(ctx context.Context, req infer.DiffRequest[PolicyArgs, Polic
 					input.Protocol != state.Protocol,
 					!equalSlicePtr(input.Ports, state.Ports),
 					!equalPortRangePtr(input.PortRanges, state.PortRanges),
-					!equalSlicePtr(input.Sources, stateSourceIDs),
-					!equalSlicePtr(input.Destinations, stateDestIDs),
+					!equalSlicePtr(input.Sources, state.Sources),
+					!equalSlicePtr(input.Destinations, state.Destinations),
 					!equalResourcePtr(input.SourceResource, state.SourceResource),
 					!equalResourcePtr(input.DestinationResource, state.DestinationResource))
 
@@ -654,31 +578,19 @@ func fromAPIPortRanges(reulePortRangeAPI *[]nbapi.RulePortRange) *[]RulePortRang
 	return &out
 }
 
-// Converts a slice of nbapi.GroupMinimum to state RuleGroup.
-func fromAPIGroupMinimums(group *[]nbapi.GroupMinimum) *[]RuleGroup {
-	if group == nil {
-		return nil
-	}
-
-	out := make([]RuleGroup, len(*group))
-	for groupIndex, group := range *group {
-		out[groupIndex] = RuleGroup{ID: group.Id, Name: group.Name}
-	}
-
-	return &out
-}
-
-func toGroupIDs(groups *[]RuleGroup) *[]string {
+// groupMinimumsToIDs converts a slice of nbapi.GroupMinimum to string IDs.
+// This is used to store state in the same format as inputs (preventing phantom diffs).
+func groupMinimumsToIDs(groups *[]nbapi.GroupMinimum) *[]string {
 	if groups == nil {
 		return nil
 	}
 
-	iDs := make([]string, len(*groups))
+	ids := make([]string, len(*groups))
 	for i, g := range *groups {
-		iDs[i] = g.ID
+		ids[i] = g.Id
 	}
 
-	return &iDs
+	return &ids
 }
 
 func equalPortRangePtr(portRangeA, portRangeB *[]RulePortRange) bool {
@@ -725,9 +637,7 @@ func buildPreviewRuleStates(inputRules []PolicyRuleArgs) []PolicyRuleState {
 	rules := make([]PolicyRuleState, len(inputRules))
 
 	for ruleIndex, rule := range inputRules {
-		sources := buildPreviewGroups(rule.Sources)
-		destinations := buildPreviewGroups(rule.Destinations)
-
+		// For preview, just copy the string IDs directly (state uses same type as inputs)
 		rules[ruleIndex] = PolicyRuleState{
 			ID:                  rule.ID,
 			Name:                rule.Name,
@@ -738,28 +648,14 @@ func buildPreviewRuleStates(inputRules []PolicyRuleArgs) []PolicyRuleState {
 			Protocol:            rule.Protocol,
 			Ports:               rule.Ports,
 			PortRanges:          rule.PortRanges,
-			Sources:             sources,
-			Destinations:        destinations,
+			Sources:             rule.Sources,      // Same type, direct copy
+			Destinations:        rule.Destinations, // Same type, direct copy
 			SourceResource:      rule.SourceResource,
 			DestinationResource: rule.DestinationResource,
 		}
 	}
 
 	return rules
-}
-
-// buildPreviewGroups creates preview RuleGroup slice from string IDs.
-func buildPreviewGroups(ids *[]string) *[]RuleGroup {
-	if ids == nil {
-		return nil
-	}
-
-	groups := make([]RuleGroup, len(*ids))
-	for j, g := range *ids {
-		groups[j] = RuleGroup{Name: "preview", ID: g}
-	}
-
-	return &groups
 }
 
 // buildAPIRulesForUpdate converts input rules to API format for update.
@@ -806,8 +702,8 @@ func buildRuleStatesFromAPIResponse(
 		apiSourcesStr := formatSliceForDebug(rule.Sources)
 		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] API returned Sources=%s after update", policyID, ruleIndex, apiSourcesStr)
 
-		sources := reconstructGroupsFromAPI(ctx, policyID, ruleIndex, rule.Sources, getInputSources(inputRules, ruleIndex), "Sources")
-		destinations := reconstructGroupsFromAPI(ctx, policyID, ruleIndex, rule.Destinations, getInputDestinations(inputRules, ruleIndex), "Destinations")
+		sources := reconstructIDsFromAPI(ctx, policyID, ruleIndex, rule.Sources, getInputSources(inputRules, ruleIndex), "Sources")
+		destinations := reconstructIDsFromAPI(ctx, policyID, ruleIndex, rule.Destinations, getInputDestinations(inputRules, ruleIndex), "Destinations")
 
 		rules[ruleIndex] = PolicyRuleState{
 			ID:                  rule.Id,
@@ -829,28 +725,27 @@ func buildRuleStatesFromAPIResponse(
 	return rules
 }
 
-// reconstructGroupsFromAPI handles the case where API returns nil but we sent groups.
-func reconstructGroupsFromAPI(
+// reconstructIDsFromAPI handles the case where API returns nil but we sent groups.
+// Returns string IDs (same as inputs).
+func reconstructIDsFromAPI(
 	ctx context.Context,
 	policyID string,
 	ruleIndex int,
 	apiGroups *[]nbapi.GroupMinimum,
 	inputIDs *[]string,
 	fieldName string,
-) *[]RuleGroup {
-	groups := fromAPIGroupMinimums(apiGroups)
-	if groups == nil && inputIDs != nil {
-		reconstructed := make([]RuleGroup, len(*inputIDs))
-		for i, id := range *inputIDs {
-			reconstructed[i] = RuleGroup{ID: id, Name: ""} // Name will be filled on next Read
-		}
-
-		groups = &reconstructed
+) *[]string {
+	ids := groupMinimumsToIDs(apiGroups)
+	if ids == nil && inputIDs != nil {
+		// API returned nil but we sent groups - use input IDs
+		idsCopy := make([]string, len(*inputIDs))
+		copy(idsCopy, *inputIDs)
+		ids = &idsCopy
 
 		p.GetLogger(ctx).Debugf("Update:Policy[%s]:Rules[%d] reconstructed %s from inputs (API returned nil)", policyID, ruleIndex, fieldName)
 	}
 
-	return groups
+	return ids
 }
 
 // getInputSources safely retrieves sources from input rules at the given index.

@@ -343,7 +343,7 @@ type PolicyRuleState struct {
 	// DestinationResource for the rule
 	DestinationResource *Resource `pulumi:"destinationResource"`
 	// Destinations Policy rule destination group IDs
-	Destinations []RuleGroup `pulumi:"destinations"`
+	Destinations []string `pulumi:"destinations"`
 	// Enabled Policy rule status
 	Enabled bool `pulumi:"enabled"`
 	// ID Policy rule.
@@ -359,7 +359,7 @@ type PolicyRuleState struct {
 	// SourceResource for the rule
 	SourceResource *Resource `pulumi:"sourceResource"`
 	// Sources Policy rule source group IDs
-	Sources []RuleGroup `pulumi:"sources"`
+	Sources []string `pulumi:"sources"`
 }
 
 type PolicyRuleStateOutput struct{ *pulumi.OutputState }
@@ -397,8 +397,8 @@ func (o PolicyRuleStateOutput) DestinationResource() ResourcePtrOutput {
 }
 
 // Destinations Policy rule destination group IDs
-func (o PolicyRuleStateOutput) Destinations() RuleGroupArrayOutput {
-	return o.ApplyT(func(v PolicyRuleState) []RuleGroup { return v.Destinations }).(RuleGroupArrayOutput)
+func (o PolicyRuleStateOutput) Destinations() pulumi.StringArrayOutput {
+	return o.ApplyT(func(v PolicyRuleState) []string { return v.Destinations }).(pulumi.StringArrayOutput)
 }
 
 // Enabled Policy rule status
@@ -437,8 +437,8 @@ func (o PolicyRuleStateOutput) SourceResource() ResourcePtrOutput {
 }
 
 // Sources Policy rule source group IDs
-func (o PolicyRuleStateOutput) Sources() RuleGroupArrayOutput {
-	return o.ApplyT(func(v PolicyRuleState) []RuleGroup { return v.Sources }).(RuleGroupArrayOutput)
+func (o PolicyRuleStateOutput) Sources() pulumi.StringArrayOutput {
+	return o.ApplyT(func(v PolicyRuleState) []string { return v.Sources }).(pulumi.StringArrayOutput)
 }
 
 type PolicyRuleStateArrayOutput struct{ *pulumi.OutputState }
@@ -617,57 +617,6 @@ func (o ResourcePtrOutput) Type() TypePtrOutput {
 	}).(TypePtrOutput)
 }
 
-type RuleGroup struct {
-	// The unique identifier of the group.
-	Id string `pulumi:"id"`
-	// The name of the group.
-	Name string `pulumi:"name"`
-}
-
-type RuleGroupOutput struct{ *pulumi.OutputState }
-
-func (RuleGroupOutput) ElementType() reflect.Type {
-	return reflect.TypeOf((*RuleGroup)(nil)).Elem()
-}
-
-func (o RuleGroupOutput) ToRuleGroupOutput() RuleGroupOutput {
-	return o
-}
-
-func (o RuleGroupOutput) ToRuleGroupOutputWithContext(ctx context.Context) RuleGroupOutput {
-	return o
-}
-
-// The unique identifier of the group.
-func (o RuleGroupOutput) Id() pulumi.StringOutput {
-	return o.ApplyT(func(v RuleGroup) string { return v.Id }).(pulumi.StringOutput)
-}
-
-// The name of the group.
-func (o RuleGroupOutput) Name() pulumi.StringOutput {
-	return o.ApplyT(func(v RuleGroup) string { return v.Name }).(pulumi.StringOutput)
-}
-
-type RuleGroupArrayOutput struct{ *pulumi.OutputState }
-
-func (RuleGroupArrayOutput) ElementType() reflect.Type {
-	return reflect.TypeOf((*[]RuleGroup)(nil)).Elem()
-}
-
-func (o RuleGroupArrayOutput) ToRuleGroupArrayOutput() RuleGroupArrayOutput {
-	return o
-}
-
-func (o RuleGroupArrayOutput) ToRuleGroupArrayOutputWithContext(ctx context.Context) RuleGroupArrayOutput {
-	return o
-}
-
-func (o RuleGroupArrayOutput) Index(i pulumi.IntInput) RuleGroupOutput {
-	return pulumi.All(o, i).ApplyT(func(vs []interface{}) RuleGroup {
-		return vs[0].([]RuleGroup)[vs[1].(int)]
-	}).(RuleGroupOutput)
-}
-
 type RulePortRange struct {
 	// End of port range
 	End int `pulumi:"end"`
@@ -791,8 +740,6 @@ func init() {
 	pulumi.RegisterOutputType(PolicyRuleStateArrayOutput{})
 	pulumi.RegisterOutputType(ResourceOutput{})
 	pulumi.RegisterOutputType(ResourcePtrOutput{})
-	pulumi.RegisterOutputType(RuleGroupOutput{})
-	pulumi.RegisterOutputType(RuleGroupArrayOutput{})
 	pulumi.RegisterOutputType(RulePortRangeOutput{})
 	pulumi.RegisterOutputType(RulePortRangeArrayOutput{})
 }
